@@ -691,7 +691,7 @@ function InventoryPage({ items, isAuthenticated, onRequireLogin }: { items: Laun
 
   return (
     <main className="page-shell inventory-page-shell">
-      <PageHeading eyebrow="我的库存" title="已拥有的物品" description="统一展示 DB_STAR 星光库存与 DB_CHALLENGE 星尘库存；星尘物品必须存在于数据库商品目录。" action={<Button variant="outline"><Boxes />全部物品 {inventory.length}</Button>} />
+      <PageHeading eyebrow="我的库存" title="已拥有的物品" description="展示当前账号可用的全部物品；外观配置仅保存在本机，使用与同步暂未开放。" action={<Button variant="outline"><Boxes />全部物品 {inventory.length}</Button>} />
       {!isAuthenticated && <div className="mb-4 flex flex-col justify-between gap-3 rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><span>登录后可使用消耗品，并配置武器与玩家外观。</span><Button size="sm" onClick={onRequireLogin}><LogIn />登录</Button></div>}
       {inventoryNotice && <div className="mb-4 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm">{inventoryNotice}</div>}
       <div className="inventory-grid">
@@ -699,10 +699,11 @@ function InventoryPage({ items, isAuthenticated, onRequireLogin }: { items: Laun
           const Icon = displayIcons[item.icon] ?? Package
           const itemName = item.quantity > 1 ? `${item.name} × ${item.quantity}` : item.name
           const slot = getCosmeticSlot(item)
+          const isEquipped = Object.values(equipment).includes(item.id)
           return (
             <Card key={item.id} className={cn("inventory-card overflow-hidden", item.quantity <= 0 && "opacity-60")} onContextMenu={(event) => openContextMenu(event, item)}>
-              <div className={cn("grid aspect-[4/3] place-items-center bg-gradient-to-br", item.tone)}><Icon className="size-12 text-white/90" /></div>
-              <CardHeader><div className="flex items-center justify-between gap-2"><Badge variant="secondary">{item.source === "stardust" ? "星尘库存" : "星光库存"}</Badge><span className="text-xs text-muted-foreground">{item.rarity}</span></div><div className="pt-2 text-[11px] text-muted-foreground">{item.type}</div><CardTitle className="pt-1 text-base">{itemName}</CardTitle></CardHeader>
+              <div className={cn("relative grid aspect-[4/3] place-items-center bg-gradient-to-br", item.tone)}><div className="absolute right-2 top-2 flex items-center gap-1"><Badge variant="outline" className="border-white/20 bg-black/35 text-white backdrop-blur-sm">{item.rarity}</Badge>{isEquipped && <Badge variant="success"><Check />已装备</Badge>}</div><Icon className="size-12 text-white/90" /></div>
+              <CardHeader><Badge variant="secondary" className="w-fit">{item.type}</Badge><CardTitle className="pt-3 text-base">{itemName}</CardTitle></CardHeader>
               <CardContent><Button variant="secondary" className="w-full" disabled={isAuthenticated && item.quantity <= 0} onClick={() => handleInventoryAction(item)}>{!isAuthenticated ? "登录后操作" : slot ? "配置装备" : "使用物品"}</Button></CardContent>
             </Card>
           )
