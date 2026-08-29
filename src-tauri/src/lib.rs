@@ -132,7 +132,10 @@ struct LauncherExchangeRate {
 #[serde(rename_all = "camelCase")]
 struct LauncherStoreItem {
     id: String,
+    external_id: String,
     currency: String,
+    category: String,
+    purchase_backend: String,
     title: String,
     description: String,
     price: i64,
@@ -147,7 +150,10 @@ struct LauncherStoreItem {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct LauncherInventoryItem {
+    product_id: Option<i64>,
     id: String,
+    source: String,
+    unique_id: String,
     name: String,
     r#type: String,
     rarity: String,

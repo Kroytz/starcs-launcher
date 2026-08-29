@@ -424,17 +424,24 @@ type CurrencyPopup = "recharge" | StoreCurrency
 
 function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBootstrap; isAuthenticated: boolean; onRequireLogin: () => void }) {
   const [activeStore, setActiveStore] = useState<StoreCurrency>("starlight")
+  const [activeCategory, setActiveCategory] = useState("all")
   const [currencyPopup, setCurrencyPopup] = useState<CurrencyPopup | null>(null)
   const [exchangeAmount, setExchangeAmount] = useState("1")
   const [storeNotice, setStoreNotice] = useState<string | null>(null)
 
-  const activeItems = data.storeItems.filter((item) => item.enabled && item.currency === activeStore)
+  const currencyItems = data.storeItems.filter((item) => item.enabled && item.currency === activeStore)
+  const categories = [...new Set(currencyItems.map((item) => item.category || "其他"))]
+  const activeItems = currencyItems.filter((item) => activeCategory === "all" || (item.category || "其他") === activeCategory)
   const wallet = data.account.wallet
   const activeBalance = activeStore === "starlight" ? wallet.starlight : wallet.stardust
   const activeBalanceAvailable = activeStore === "starlight" ? wallet.starlightAvailable : wallet.stardustAvailable
   const parsedExchangeAmount = Math.max(0, Math.floor(Number(exchangeAmount) || 0))
   const exchangeRate = (target: StoreCurrency) => data.account.exchangeRates.find((item) => item.from === "starCoin" && item.to === target)?.rate ?? 0
   const balanceLabel = (value: number, available: boolean) => !isAuthenticated ? "—" : available ? value.toLocaleString() : "暂无数据"
+
+  useEffect(() => {
+    setActiveCategory("all")
+  }, [activeStore])
 
   function exchange(target: StoreCurrency) {
     if (!isAuthenticated) {
@@ -445,12 +452,13 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
     setCurrencyPopup(null)
   }
 
-  function purchase(title: string) {
+  function purchase(title: string, purchaseBackend: string) {
     if (!isAuthenticated) {
       onRequireLogin()
       return
     }
-    setStoreNotice(`「${title}」来自真实商品表；当前后端只读，购买暂未开放。`)
+    const backendName = purchaseBackend === "challenge-stardust" ? "DB_CHALLENGE 星尘商店" : "DB_STAR 星光商店"
+    setStoreNotice(`「${title}」将通过 ${backendName} 的独立购买流程处理；当前后端只读，购买暂未开放。`)
   }
 
   return (
@@ -500,17 +508,22 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
         <div className="text-sm text-muted-foreground">当前余额：<span className="font-semibold text-foreground">{!isAuthenticated ? "登录后查看" : activeBalanceAvailable ? `${activeBalance.toLocaleString()} ${activeStore === "starlight" ? "星光" : "星尘"}` : "当前数据库暂无数据"}</span></div>
       </div>
 
+      <div className="mt-4 flex items-center gap-2 overflow-x-auto pb-1" aria-label="商品分类">
+        <Button size="sm" variant={activeCategory === "all" ? "secondary" : "outline"} onClick={() => setActiveCategory("all")}>全部 {currencyItems.length}</Button>
+        {categories.map((category) => <Button key={category} size="sm" className="shrink-0" variant={activeCategory === category ? "secondary" : "outline"} onClick={() => setActiveCategory(category)}>{category} {currencyItems.filter((item) => (item.category || "其他") === category).length}</Button>)}
+      </div>
+
       {storeNotice && <div className="mt-4 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-foreground">{storeNotice}</div>}
 
-      {activeItems.length === 0 && <Card className="mt-4"><CardContent className="py-12 text-center text-sm text-muted-foreground">{activeStore === "stardust" ? "当前数据库暂无星尘商品映射。" : "当前没有可展示的商品。"}</CardContent></Card>}
+      {activeItems.length === 0 && <Card className="mt-4"><CardContent className="py-12 text-center text-sm text-muted-foreground">{currencyItems.length === 0 && activeStore === "stardust" ? "星尘商品目录尚未导入 DB_CHALLENGE。" : "当前分类没有可展示的商品。"}</CardContent></Card>}
       <div className="store-grid mt-4">
         {activeItems.map((item) => {
           const Icon = displayIcons[item.icon] ?? Package
           return (
             <Card key={item.id} className="store-card overflow-hidden">
               <div className={cn("relative grid h-32 place-items-center overflow-hidden bg-gradient-to-br", item.tone)}>{item.imageUrl ? <img src={item.imageUrl} alt="" className="absolute inset-0 size-full object-cover" onError={(event) => { event.currentTarget.style.display = "none" }} /> : null}<Icon className="size-12 text-white/90" /></div>
-              <CardHeader><div className="flex items-center justify-between"><Badge variant="secondary">{item.tag}</Badge><span className="flex items-center gap-1 font-semibold text-primary">{activeStore === "starlight" ? <Sparkles className="size-3.5" /> : <Gem className="size-3.5" />}{item.price}</span></div><CardTitle className="pt-3 text-base">{item.title}</CardTitle><CardDescription>{item.description}</CardDescription></CardHeader>
-              <CardContent><Button className="w-full" variant="outline" onClick={() => purchase(item.title)}>{!isAuthenticated ? "登录后查看" : "只读展示"}</Button></CardContent>
+              <CardHeader><div className="flex items-center justify-between gap-2"><div className="flex min-w-0 gap-1"><Badge variant="secondary">{item.category || "其他"}</Badge>{item.tag && item.tag !== item.category && <Badge variant="outline">{item.tag}</Badge>}</div><span className="flex items-center gap-1 font-semibold text-primary">{activeStore === "starlight" ? <Sparkles className="size-3.5" /> : <Gem className="size-3.5" />}{item.price}</span></div><CardTitle className="pt-3 text-base">{item.title}</CardTitle><CardDescription>{item.description}</CardDescription></CardHeader>
+              <CardContent><Button className="w-full" variant="outline" onClick={() => purchase(item.title, item.purchaseBackend)}>{!isAuthenticated ? "登录后查看" : item.purchaseBackend === "challenge-stardust" ? "星尘购买（只读）" : "星光购买（只读）"}</Button></CardContent>
             </Card>
           )
         })}
@@ -678,7 +691,7 @@ function InventoryPage({ items, isAuthenticated, onRequireLogin }: { items: Laun
 
   return (
     <main className="page-shell inventory-page-shell">
-      <PageHeading eyebrow="我的库存" title="已拥有的物品" description="库存来自真实数据库；外观配置仅保存在本机，使用与同步暂未开放。" action={<Button variant="outline"><Boxes />全部物品 {inventory.length}</Button>} />
+      <PageHeading eyebrow="我的库存" title="已拥有的物品" description="统一展示 DB_STAR 星光库存与 DB_CHALLENGE 星尘库存；星尘物品必须存在于数据库商品目录。" action={<Button variant="outline"><Boxes />全部物品 {inventory.length}</Button>} />
       {!isAuthenticated && <div className="mb-4 flex flex-col justify-between gap-3 rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><span>登录后可使用消耗品，并配置武器与玩家外观。</span><Button size="sm" onClick={onRequireLogin}><LogIn />登录</Button></div>}
       {inventoryNotice && <div className="mb-4 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm">{inventoryNotice}</div>}
       <div className="inventory-grid">
@@ -689,7 +702,7 @@ function InventoryPage({ items, isAuthenticated, onRequireLogin }: { items: Laun
           return (
             <Card key={item.id} className={cn("inventory-card overflow-hidden", item.quantity <= 0 && "opacity-60")} onContextMenu={(event) => openContextMenu(event, item)}>
               <div className={cn("grid aspect-[4/3] place-items-center bg-gradient-to-br", item.tone)}><Icon className="size-12 text-white/90" /></div>
-              <CardHeader><div className="flex items-center justify-between gap-2"><Badge variant="outline">{item.type}</Badge><span className="text-xs text-muted-foreground">{item.rarity}</span></div><CardTitle className="pt-3 text-base">{itemName}</CardTitle></CardHeader>
+              <CardHeader><div className="flex items-center justify-between gap-2"><Badge variant="secondary">{item.source === "stardust" ? "星尘库存" : "星光库存"}</Badge><span className="text-xs text-muted-foreground">{item.rarity}</span></div><div className="pt-2 text-[11px] text-muted-foreground">{item.type}</div><CardTitle className="pt-1 text-base">{itemName}</CardTitle></CardHeader>
               <CardContent><Button variant="secondary" className="w-full" disabled={isAuthenticated && item.quantity <= 0} onClick={() => handleInventoryAction(item)}>{!isAuthenticated ? "登录后操作" : slot ? "配置装备" : "使用物品"}</Button></CardContent>
             </Card>
           )

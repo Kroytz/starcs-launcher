@@ -27,7 +27,10 @@ export type LauncherExchangeRate = {
 
 export type LauncherStoreItem = {
   id: string
+  externalId: string
   currency: "starlight" | "stardust"
+  category: string
+  purchaseBackend: "star-product" | "challenge-stardust"
   title: string
   description: string
   price: number
@@ -42,6 +45,8 @@ export type LauncherStoreItem = {
 export type LauncherInventoryItem = {
   productId?: number
   id: string
+  source: "starlight" | "stardust"
+  uniqueId: string
   name: string
   type: string
   rarity: string
