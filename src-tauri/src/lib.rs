@@ -85,6 +85,8 @@ struct LauncherAnnouncement {
     dismissible: bool,
     display_date: String,
     published_at: String,
+    cover_image_url: String,
+    detail_image_url: String,
     render_payload: Option<LauncherAnnouncementPayload>,
 }
 

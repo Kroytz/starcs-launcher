@@ -8,6 +8,8 @@ export type LauncherAnnouncement = {
   dismissible: boolean
   displayDate: string
   publishedAt: string
+  coverImageUrl: string
+  detailImageUrl: string
   renderPayload: LauncherAnnouncementPayload | null
 }
 

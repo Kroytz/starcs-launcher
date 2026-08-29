@@ -219,6 +219,7 @@ function LoginDialog({ open, onOpenChange, account, isLoading, isSubmitting, acc
 
 function announcementHeroImage(announcement: LauncherAnnouncement | null) {
   if (!announcement) return ""
+  if (announcement.coverImageUrl) return announcement.coverImageUrl
   for (const section of announcement.renderPayload?.sections ?? []) {
     for (const block of section.blocks ?? []) {
       if (block.imageUrl) return block.imageUrl
@@ -229,17 +230,25 @@ function announcementHeroImage(announcement: LauncherAnnouncement | null) {
 
 function AnnouncementDetailDialog({ announcement, onOpenChange }: { announcement: LauncherAnnouncement | null; onOpenChange: (open: boolean) => void }) {
   const sections = announcement?.renderPayload?.sections ?? []
+  const [detailImageFailed, setDetailImageFailed] = useState(false)
+  const showDetailImage = Boolean(announcement?.detailImageUrl && !detailImageFailed)
+
+  useEffect(() => setDetailImageFailed(false), [announcement?.id])
+
   return (
     <Dialog open={announcement !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[86vh] overflow-y-auto sm:max-w-[720px]">
-        {announcement && <>
-          <DialogHeader><div className="mb-1 flex items-center gap-2"><Badge className="bg-accent text-white">公告</Badge><span className="text-xs text-muted-foreground">{announcement.displayDate}</span></div><DialogTitle className="text-2xl">{announcement.title}</DialogTitle><DialogDescription>完整公告内容</DialogDescription></DialogHeader>
-          <div className="space-y-6">
-            {sections.length === 0 && <p className="whitespace-pre-line text-sm leading-7 text-foreground/90">{announcement.content}</p>}
-            {sections.map((section, sectionIndex) => <section key={`${section.title ?? "section"}-${sectionIndex}`} className="space-y-3"><h3 className="text-base font-semibold">{section.title || `公告内容 ${sectionIndex + 1}`}</h3>{(section.blocks ?? []).map((block, blockIndex) => block.kind === 2 && block.imageUrl ? <img key={`image-${blockIndex}`} src={block.imageUrl} alt={`${announcement.title}配图`} className="max-h-[440px] w-full rounded-xl border border-border bg-muted/20 object-contain" /> : block.text ? <p key={`text-${blockIndex}`} className="whitespace-pre-line text-sm leading-7 text-foreground/90">{block.text}</p> : null)}</section>)}
-            {(announcement.renderPayload?.footerMessage || announcement.renderPayload?.footerTeamName) && <div className="border-t border-border pt-4 text-right text-sm text-muted-foreground">{announcement.renderPayload.footerMessage && <div>{announcement.renderPayload.footerMessage}</div>}{announcement.renderPayload.footerTeamName && <div className="mt-1 font-medium text-foreground">{announcement.renderPayload.footerTeamName}</div>}</div>}
-          </div>
-        </>}
+      <DialogContent className={cn("max-h-[86vh] overflow-y-auto sm:max-w-[720px]", showDetailImage && "p-2")}>
+        {announcement && (showDetailImage ? <>
+          <DialogHeader className="sr-only"><DialogTitle>{announcement.title}</DialogTitle><DialogDescription>完整公告内容</DialogDescription></DialogHeader>
+          <img src={announcement.detailImageUrl} alt={announcement.title} className="w-full rounded-xl bg-muted/20 object-contain" onError={() => setDetailImageFailed(true)} />
+        </> : <>
+            <DialogHeader><div className="mb-1 flex items-center gap-2"><Badge className="bg-accent text-white">公告</Badge><span className="text-xs text-muted-foreground">{announcement.displayDate}</span></div><DialogTitle className="text-2xl">{announcement.title}</DialogTitle><DialogDescription>完整公告内容</DialogDescription></DialogHeader>
+            <div className="space-y-6">
+              {sections.length === 0 && <p className="whitespace-pre-line text-sm leading-7 text-foreground/90">{announcement.content}</p>}
+              {sections.map((section, sectionIndex) => <section key={`${section.title ?? "section"}-${sectionIndex}`} className="space-y-3"><h3 className="text-base font-semibold">{section.title || `公告内容 ${sectionIndex + 1}`}</h3>{(section.blocks ?? []).map((block, blockIndex) => block.kind === 2 && block.imageUrl ? <img key={`image-${blockIndex}`} src={block.imageUrl} alt={`${announcement.title}配图`} className="max-h-[440px] w-full rounded-xl border border-border bg-muted/20 object-contain" /> : block.text ? <p key={`text-${blockIndex}`} className="whitespace-pre-line text-sm leading-7 text-foreground/90">{block.text}</p> : null)}</section>)}
+              {(announcement.renderPayload?.footerMessage || announcement.renderPayload?.footerTeamName) && <div className="border-t border-border pt-4 text-right text-sm text-muted-foreground">{announcement.renderPayload.footerMessage && <div>{announcement.renderPayload.footerMessage}</div>}{announcement.renderPayload.footerTeamName && <div className="mt-1 font-medium text-foreground">{announcement.renderPayload.footerTeamName}</div>}</div>}
+            </div>
+          </>)}
       </DialogContent>
     </Dialog>
   )
