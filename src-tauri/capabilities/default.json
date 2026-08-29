@@ -8,7 +8,10 @@
     "opener:default",
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "steam://connect/*" }]
+      "allow": [
+        { "url": "steam://connect/*" },
+        { "url": "https://www.ifdian.net/item/*" }
+      ]
     }
   ]
 }

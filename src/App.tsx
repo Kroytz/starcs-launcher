@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { openUrl } from "@tauri-apps/plugin-opener"
 import type { LucideIcon } from "lucide-react"
 import {
   ArrowDown,
@@ -80,6 +81,7 @@ import {
   type LauncherPenalty,
   type LauncherPurchaseHistoryItem,
   type LauncherSeasonPass,
+  type LauncherStoreItem,
 } from "@/lib/launcher-api"
 import {
   getLocalSteamAccount,
@@ -482,11 +484,12 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
   )
 }
 
-type StoreCurrency = "starlight" | "stardust"
-type CurrencyPopup = "recharge" | StoreCurrency
+type ExchangeCurrency = "starlight" | "stardust"
+type StoreKind = ExchangeCurrency | "afdian"
+type CurrencyPopup = "recharge" | ExchangeCurrency
 
 function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBootstrap; isAuthenticated: boolean; onRequireLogin: () => void }) {
-  const [activeStore, setActiveStore] = useState<StoreCurrency>("starlight")
+  const [activeStore, setActiveStore] = useState<StoreKind>("starlight")
   const [activeCategory, setActiveCategory] = useState("all")
   const [currencyPopup, setCurrencyPopup] = useState<CurrencyPopup | null>(null)
   const [exchangeAmount, setExchangeAmount] = useState("1")
@@ -498,10 +501,10 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
   const categories = [...new Set(currencyItems.map((item) => item.category || "其他"))]
   const activeItems = currencyItems.filter((item) => activeCategory === "all" || (item.category || "其他") === activeCategory)
   const wallet = data.account.wallet
-  const activeBalance = activeStore === "starlight" ? wallet.starlight : wallet.stardust
-  const activeBalanceAvailable = activeStore === "starlight" ? wallet.starlightAvailable : wallet.stardustAvailable
+  const activeBalance = activeStore === "starlight" ? wallet.starlight : activeStore === "stardust" ? wallet.stardust : 0
+  const activeBalanceAvailable = activeStore === "starlight" ? wallet.starlightAvailable : activeStore === "stardust" ? wallet.stardustAvailable : false
   const parsedExchangeAmount = Math.max(0, Math.floor(Number(exchangeAmount) || 0))
-  const exchangeRate = (target: StoreCurrency) => data.account.exchangeRates.find((item) => item.from === "starCoin" && item.to === target)?.rate ?? 0
+  const exchangeRate = (target: ExchangeCurrency) => data.account.exchangeRates.find((item) => item.from === "starCoin" && item.to === target)?.rate ?? 0
   const balanceLabel = (value: number, available: boolean) => !isAuthenticated ? "—" : available ? value.toLocaleString() : "暂无数据"
 
   const updateCategoryScrollEdges = useCallback(() => {
@@ -538,7 +541,7 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
     container.scrollBy({ left: direction * distance, behavior: "smooth" })
   }
 
-  function exchange(target: StoreCurrency) {
+  function exchange(target: ExchangeCurrency) {
     if (!isAuthenticated) {
       onRequireLogin()
       return
@@ -547,18 +550,30 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
     setCurrencyPopup(null)
   }
 
-  function purchase(title: string, purchaseBackend: string) {
+  async function purchase(item: LauncherStoreItem) {
     if (!isAuthenticated) {
       onRequireLogin()
       return
     }
-    const backendName = purchaseBackend === "challenge-stardust" ? "DB_CHALLENGE 星尘商店" : "DB_STAR 星光商店"
-    setStoreNotice(`「${title}」将通过 ${backendName} 的独立购买流程处理；当前后端只读，购买暂未开放。`)
+    if (item.purchaseBackend === "afdian-cdk") {
+      if (!item.purchaseUrl) {
+        setStoreNotice(`「${item.title}」暂时没有可用的爱发电购买链接。`)
+        return
+      }
+      try {
+        await openUrl(item.purchaseUrl)
+      } catch (error) {
+        setStoreNotice(`无法打开爱发电购买页：${error instanceof Error ? error.message : String(error)}`)
+      }
+      return
+    }
+    const backendName = item.purchaseBackend === "challenge-stardust" ? "DB_CHALLENGE 星尘商店" : "DB_STAR 星光商店"
+    setStoreNotice(`「${item.title}」将通过 ${backendName} 的独立购买流程处理；当前后端只读，购买暂未开放。`)
   }
 
   return (
     <main className="page-shell">
-      <PageHeading eyebrow="STAR 商城" title="星社区兑换中心" description="管理三种货币，并在星光商店与星尘商店兑换不同物品。" />
+      <PageHeading eyebrow="STAR 商城" title="星社区兑换中心" description="管理三种货币，并在星光、星尘与发电商店选购物品。" />
 
       {!isAuthenticated && <div className="mb-5 flex flex-col justify-between gap-3 rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><span>登录后可查看真实余额、购买记录与商城数据；交易功能暂未开放。</span><Button size="sm" onClick={onRequireLogin}><LogIn />登录</Button></div>}
 
@@ -599,8 +614,9 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
         <div className="store-tabs">
           <Button variant={activeStore === "starlight" ? "secondary" : "ghost"} onClick={() => setActiveStore("starlight")}><Sparkles />星光商店</Button>
           <Button variant={activeStore === "stardust" ? "secondary" : "ghost"} onClick={() => setActiveStore("stardust")}><Gem />星尘商店</Button>
+          <Button variant={activeStore === "afdian" ? "secondary" : "ghost"} onClick={() => setActiveStore("afdian")}><Zap />发电商店</Button>
         </div>
-        <div className="text-sm text-muted-foreground">当前余额：<span className="font-semibold text-foreground">{!isAuthenticated ? "登录后查看" : activeBalanceAvailable ? `${activeBalance.toLocaleString()} ${activeStore === "starlight" ? "星光" : "星尘"}` : "当前数据库暂无数据"}</span></div>
+        <div className="text-sm text-muted-foreground">{activeStore === "afdian" ? <span>人民币定价 · <span className="font-semibold text-foreground">在系统浏览器完成购买</span></span> : <>当前余额：<span className="font-semibold text-foreground">{!isAuthenticated ? "登录后查看" : activeBalanceAvailable ? `${activeBalance.toLocaleString()} ${activeStore === "starlight" ? "星光" : "星尘"}` : "当前数据库暂无数据"}</span></>}</div>
       </div>
 
       <div className="relative mt-4">
@@ -614,15 +630,15 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
 
       {storeNotice && <div className="mt-4 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-foreground">{storeNotice}</div>}
 
-      {activeItems.length === 0 && <Card className="mt-4"><CardContent className="py-12 text-center text-sm text-muted-foreground">{currencyItems.length === 0 && activeStore === "stardust" ? "星尘商品目录尚未导入 DB_CHALLENGE。" : "当前分类没有可展示的商品。"}</CardContent></Card>}
+      {activeItems.length === 0 && <Card className="mt-4"><CardContent className="py-12 text-center text-sm text-muted-foreground">{currencyItems.length === 0 && activeStore === "stardust" ? "星尘商品目录尚未导入 DB_CHALLENGE。" : currencyItems.length === 0 && activeStore === "afdian" ? "暂无可购买的爱发电商品。" : "当前分类没有可展示的商品。"}</CardContent></Card>}
       <div className="store-grid mt-4">
         {activeItems.map((item) => {
           const Icon = displayIcons[item.icon] ?? Package
           return (
             <Card key={item.id} className="store-card overflow-hidden">
               <div className={cn("relative grid h-32 place-items-center overflow-hidden bg-gradient-to-br", item.tone)}>{item.imageUrl ? <img src={item.imageUrl} alt="" className="absolute inset-0 size-full object-cover" onError={(event) => { event.currentTarget.style.display = "none" }} /> : null}<Icon className="size-12 text-white/90" /></div>
-              <CardHeader><div className="flex items-center justify-between gap-2"><div className="flex min-w-0 gap-1"><Badge variant="secondary">{item.category || "其他"}</Badge>{item.tag && item.tag !== item.category && <Badge variant="outline">{item.tag}</Badge>}</div><span className="flex items-center gap-1 font-semibold text-primary">{activeStore === "starlight" ? <Sparkles className="size-3.5" /> : <Gem className="size-3.5" />}{item.price}</span></div><CardTitle className="pt-3 text-base">{item.title}</CardTitle><CardDescription>{item.description}</CardDescription></CardHeader>
-              <CardContent><Button className="w-full" variant="outline" onClick={() => purchase(item.title, item.purchaseBackend)}>{!isAuthenticated ? "登录后查看" : item.purchaseBackend === "challenge-stardust" ? "星尘购买（只读）" : "星光购买（只读）"}</Button></CardContent>
+              <CardHeader><div className="flex items-center justify-between gap-2"><div className="flex min-w-0 gap-1"><Badge variant="secondary">{item.category || "其他"}</Badge>{item.tag && item.tag !== item.category && <Badge variant="outline">{item.tag}</Badge>}</div><span className="flex items-center gap-1 font-semibold text-primary">{activeStore === "afdian" ? <>¥{item.price}</> : <>{activeStore === "starlight" ? <Sparkles className="size-3.5" /> : <Gem className="size-3.5" />}{item.price}</>}</span></div><CardTitle className="pt-3 text-base">{item.title}</CardTitle><CardDescription>{item.description}</CardDescription></CardHeader>
+              <CardContent><Button className="w-full" variant="outline" onClick={() => void purchase(item)}>{!isAuthenticated ? "登录后购买" : item.purchaseBackend === "afdian-cdk" ? "前往爱发电购买" : item.purchaseBackend === "challenge-stardust" ? "星尘购买（只读）" : "星光购买（只读）"}</Button></CardContent>
             </Card>
           )
         })}

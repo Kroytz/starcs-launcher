@@ -164,6 +164,8 @@ struct LauncherStoreItem {
     currency: String,
     category: String,
     purchase_backend: String,
+    #[serde(default)]
+    purchase_url: String,
     title: String,
     description: String,
     price: i64,

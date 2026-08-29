@@ -50,9 +50,10 @@ export type LauncherExchangeRate = {
 export type LauncherStoreItem = {
   id: string
   externalId: string
-  currency: "starlight" | "stardust"
+  currency: "starlight" | "stardust" | "afdian"
   category: string
-  purchaseBackend: "star-product" | "challenge-stardust"
+  purchaseBackend: "star-product" | "challenge-stardust" | "afdian-cdk"
+  purchaseUrl: string
   title: string
   description: string
   price: number
