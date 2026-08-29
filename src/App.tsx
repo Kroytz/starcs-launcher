@@ -8,6 +8,7 @@ import {
   Bell,
   Boxes,
   Check,
+  ChevronLeft,
   ChevronRight,
   Coins,
   Eye,
@@ -428,6 +429,8 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
   const [currencyPopup, setCurrencyPopup] = useState<CurrencyPopup | null>(null)
   const [exchangeAmount, setExchangeAmount] = useState("1")
   const [storeNotice, setStoreNotice] = useState<string | null>(null)
+  const categoryScrollRef = useRef<HTMLDivElement>(null)
+  const [categoryScrollEdges, setCategoryScrollEdges] = useState({ left: false, right: false })
 
   const currencyItems = data.storeItems.filter((item) => item.enabled && item.currency === activeStore)
   const categories = [...new Set(currencyItems.map((item) => item.category || "其他"))]
@@ -439,9 +442,39 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
   const exchangeRate = (target: StoreCurrency) => data.account.exchangeRates.find((item) => item.from === "starCoin" && item.to === target)?.rate ?? 0
   const balanceLabel = (value: number, available: boolean) => !isAuthenticated ? "—" : available ? value.toLocaleString() : "暂无数据"
 
+  const updateCategoryScrollEdges = useCallback(() => {
+    const container = categoryScrollRef.current
+    if (!container) return
+    const maxScrollLeft = Math.max(0, container.scrollWidth - container.clientWidth)
+    setCategoryScrollEdges({
+      left: container.scrollLeft > 2,
+      right: container.scrollLeft < maxScrollLeft - 2,
+    })
+  }, [])
+
   useEffect(() => {
     setActiveCategory("all")
   }, [activeStore])
+
+  useEffect(() => {
+    const container = categoryScrollRef.current
+    if (!container) return
+    container.scrollTo({ left: 0 })
+    const frame = requestAnimationFrame(updateCategoryScrollEdges)
+    const observer = new ResizeObserver(updateCategoryScrollEdges)
+    observer.observe(container)
+    return () => {
+      cancelAnimationFrame(frame)
+      observer.disconnect()
+    }
+  }, [activeStore, currencyItems.length, updateCategoryScrollEdges])
+
+  function scrollCategories(direction: -1 | 1) {
+    const container = categoryScrollRef.current
+    if (!container) return
+    const distance = Math.max(240, Math.round(container.clientWidth * 0.65))
+    container.scrollBy({ left: direction * distance, behavior: "smooth" })
+  }
 
   function exchange(target: StoreCurrency) {
     if (!isAuthenticated) {
@@ -508,9 +541,13 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
         <div className="text-sm text-muted-foreground">当前余额：<span className="font-semibold text-foreground">{!isAuthenticated ? "登录后查看" : activeBalanceAvailable ? `${activeBalance.toLocaleString()} ${activeStore === "starlight" ? "星光" : "星尘"}` : "当前数据库暂无数据"}</span></div>
       </div>
 
-      <div className="mt-4 flex items-center gap-2 overflow-x-auto pb-1" aria-label="商品分类">
-        <Button size="sm" variant={activeCategory === "all" ? "secondary" : "outline"} onClick={() => setActiveCategory("all")}>全部 {currencyItems.length}</Button>
-        {categories.map((category) => <Button key={category} size="sm" className="shrink-0" variant={activeCategory === category ? "secondary" : "outline"} onClick={() => setActiveCategory(category)}>{category} {currencyItems.filter((item) => (item.category || "其他") === category).length}</Button>)}
+      <div className="relative mt-4">
+        {categoryScrollEdges.left && <button type="button" className="group absolute inset-y-0 left-0 z-10 flex w-12 items-center justify-start bg-gradient-to-r from-background via-background/85 to-transparent opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100" onClick={() => scrollCategories(-1)} aria-label="向左查看更多分类"><span className="grid size-7 place-items-center rounded-full border border-border bg-card text-foreground shadow-md"><ChevronLeft className="size-4" /></span></button>}
+        <div ref={categoryScrollRef} className="store-category-scroll flex items-center gap-2 overflow-x-auto pb-1" aria-label="商品分类" onScroll={updateCategoryScrollEdges}>
+          <Button size="sm" className="shrink-0" variant={activeCategory === "all" ? "secondary" : "outline"} onClick={() => setActiveCategory("all")}>全部 {currencyItems.length}</Button>
+          {categories.map((category) => <Button key={category} size="sm" className="shrink-0" variant={activeCategory === category ? "secondary" : "outline"} onClick={() => setActiveCategory(category)}>{category} {currencyItems.filter((item) => (item.category || "其他") === category).length}</Button>)}
+        </div>
+        {categoryScrollEdges.right && <button type="button" className="group absolute inset-y-0 right-0 z-10 flex w-12 items-center justify-end bg-gradient-to-l from-background via-background/85 to-transparent opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100" onClick={() => scrollCategories(1)} aria-label="向右查看更多分类"><span className="grid size-7 place-items-center rounded-full border border-border bg-card text-foreground shadow-md"><ChevronRight className="size-4" /></span></button>}
       </div>
 
       {storeNotice && <div className="mt-4 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-foreground">{storeNotice}</div>}

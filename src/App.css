@@ -131,6 +131,8 @@ button { cursor: pointer; }
 .currency-icon { display: grid; width: 42px; height: 42px; flex: none; place-items: center; border-radius: 12px; }
 .currency-icon svg { width: 20px; height: 20px; }
 .store-tabs { display: flex; width: fit-content; gap: 4px; border: 1px solid var(--border); border-radius: 10px; padding: 4px; background: color-mix(in srgb, var(--card) 86%, transparent); }
+.store-category-scroll { scrollbar-width: none; }
+.store-category-scroll::-webkit-scrollbar { display: none; }
 .store-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
 .store-card, .inventory-card { transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease; }
 .store-card:hover, .inventory-card:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--color-primary) 42%, var(--border)); box-shadow: 0 16px 44px rgb(15 23 42 / 12%); }
