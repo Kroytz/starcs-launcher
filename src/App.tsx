@@ -489,7 +489,7 @@ type StoreKind = ExchangeCurrency | "afdian"
 type CurrencyPopup = "recharge" | ExchangeCurrency
 
 function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBootstrap; isAuthenticated: boolean; onRequireLogin: () => void }) {
-  const [activeStore, setActiveStore] = useState<StoreKind>("starlight")
+  const [activeStore, setActiveStore] = useState<StoreKind>("afdian")
   const [activeCategory, setActiveCategory] = useState("all")
   const [currencyPopup, setCurrencyPopup] = useState<CurrencyPopup | null>(null)
   const [exchangeAmount, setExchangeAmount] = useState("1")
@@ -612,9 +612,9 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
 
       <div className="mt-7 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div className="store-tabs">
+          <Button variant={activeStore === "afdian" ? "secondary" : "ghost"} onClick={() => setActiveStore("afdian")}><Zap />发电商店</Button>
           <Button variant={activeStore === "starlight" ? "secondary" : "ghost"} onClick={() => setActiveStore("starlight")}><Sparkles />星光商店</Button>
           <Button variant={activeStore === "stardust" ? "secondary" : "ghost"} onClick={() => setActiveStore("stardust")}><Gem />星尘商店</Button>
-          <Button variant={activeStore === "afdian" ? "secondary" : "ghost"} onClick={() => setActiveStore("afdian")}><Zap />发电商店</Button>
         </div>
         <div className="text-sm text-muted-foreground">{activeStore === "afdian" ? <span>人民币定价 · <span className="font-semibold text-foreground">在系统浏览器完成购买</span></span> : <>当前余额：<span className="font-semibold text-foreground">{!isAuthenticated ? "登录后查看" : activeBalanceAvailable ? `${activeBalance.toLocaleString()} ${activeStore === "starlight" ? "星光" : "星尘"}` : "当前数据库暂无数据"}</span></>}</div>
       </div>
