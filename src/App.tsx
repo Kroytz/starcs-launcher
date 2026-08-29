@@ -394,11 +394,11 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
             <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索服务器、地图或模式..." className="pl-9" />
           </div>
           <div className="col-span-12 flex justify-end gap-2 md:col-span-6 lg:col-span-7">
-            <div className="flex rounded-lg border border-border bg-card p-1">
+            <div className="flex h-9 rounded-md border border-border bg-card p-px">
               <Button size="sm" variant={filter === "all" ? "secondary" : "ghost"} onClick={() => setFilter("all")}>全部 {servers.length}</Button>
               <Button size="sm" variant={filter === "online" ? "secondary" : "ghost"} onClick={() => setFilter("online")}>可加入 {joinableCount}</Button>
             </div>
-            <Button variant="outline" size="sm" disabled={isLoading} onClick={() => void loadServers()}><RefreshCw className={cn(isLoading && "animate-spin")} />刷新</Button>
+            <Button variant="outline" size="sm" className="h-9" disabled={isLoading} onClick={() => void loadServers()}><RefreshCw className={cn(isLoading && "animate-spin")} />刷新</Button>
           </div>
         </div>
 
