@@ -247,6 +247,9 @@ function AnnouncementDetailDialog({ announcement, onOpenChange }: { announcement
 
 function AnnouncementCenter({ announcements, isLoading, onSelect }: { announcements: LauncherAnnouncement[]; isLoading: boolean; onSelect: (announcement: LauncherAnnouncement) => void }) {
   const slides = announcements.slice(0, 5)
+  const latestAnnouncements = [...announcements]
+    .sort((left, right) => (Date.parse(right.publishedAt) || 0) - (Date.parse(left.publishedAt) || 0))
+    .slice(0, 5)
   const [activeIndex, setActiveIndex] = useState(0)
   const [paused, setPaused] = useState(false)
   const activeAnnouncement = slides[activeIndex] ?? null
@@ -283,7 +286,7 @@ function AnnouncementCenter({ announcements, isLoading, onSelect }: { announceme
         </> : <div className="grid min-h-[270px] place-items-center text-sm text-muted-foreground">{isLoading ? <span className="flex items-center gap-2"><RefreshCw className="size-4 animate-spin" />正在加载公告…</span> : "暂无公告"}</div>}
       </Card>
 
-      <Card className="overflow-hidden"><CardHeader className="pb-3"><div className="flex items-center justify-between"><div><CardTitle className="text-base">最新公告</CardTitle><CardDescription>最近发布的 5 条社区动态</CardDescription></div><Bell className="size-5 text-primary" /></div></CardHeader><CardContent className="px-3 pb-3"><div className="divide-y divide-border">{announcements.slice(0, 5).map((announcement) => <button key={announcement.id} type="button" className="group flex w-full items-center gap-3 rounded-md px-2 py-3 text-left hover:bg-muted/45" onClick={() => onSelect(announcement)}><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Bell className="size-3.5" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium group-hover:text-primary">{announcement.title}</span><span className="mt-1 block truncate text-xs text-muted-foreground">{announcement.content}</span></span><span className="shrink-0 text-[10px] text-muted-foreground">{announcement.displayDate}</span></button>)}{!isLoading && announcements.length === 0 && <div className="py-12 text-center text-sm text-muted-foreground">暂无最新公告</div>}</div></CardContent></Card>
+      <Card className="overflow-hidden"><CardHeader className="pb-3"><div className="flex items-center justify-between"><div><CardTitle className="text-base">最新公告</CardTitle><CardDescription>最近发布的 5 条社区动态</CardDescription></div><Bell className="size-5 text-primary" /></div></CardHeader><CardContent className="px-3 pb-3"><div className="divide-y divide-border">{latestAnnouncements.map((announcement) => <button key={announcement.id} type="button" className="group flex w-full items-center gap-3 rounded-md px-2 py-3 text-left hover:bg-muted/45" onClick={() => onSelect(announcement)}><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Bell className="size-3.5" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium group-hover:text-primary">{announcement.title}</span><span className="mt-1 block truncate text-xs text-muted-foreground">{announcement.content}</span></span><span className="shrink-0 text-[10px] text-muted-foreground">{announcement.displayDate}</span></button>)}{!isLoading && latestAnnouncements.length === 0 && <div className="py-12 text-center text-sm text-muted-foreground">暂无最新公告</div>}</div></CardContent></Card>
     </section>
   )
 }
@@ -376,17 +379,17 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
             <Button variant="outline" size="sm" disabled={isBackendLoading} onClick={onRetryBackend}><RefreshCw className={cn(isBackendLoading && "animate-spin")} />重试</Button>
           </div>
         )}
-        <div className="col-span-12 grid grid-cols-12 gap-5">
-          <div className="relative col-span-12 lg:col-span-8">
+        <div className="col-span-12 grid grid-cols-12 gap-3">
+          <div className="relative col-span-12 md:col-span-6 lg:col-span-5">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索服务器、地图或模式..." className="pl-9" />
           </div>
-          <div className="col-span-12 flex justify-end gap-2 lg:col-span-4">
-            <Button variant="outline" size="sm" disabled={isLoading} onClick={() => void loadServers()}><RefreshCw className={cn(isLoading && "animate-spin")} />刷新</Button>
+          <div className="col-span-12 flex justify-end gap-2 md:col-span-6 lg:col-span-7">
             <div className="flex rounded-lg border border-border bg-card p-1">
               <Button size="sm" variant={filter === "all" ? "secondary" : "ghost"} onClick={() => setFilter("all")}>全部 {servers.length}</Button>
               <Button size="sm" variant={filter === "online" ? "secondary" : "ghost"} onClick={() => setFilter("online")}>可加入 {joinableCount}</Button>
             </div>
+            <Button variant="outline" size="sm" disabled={isLoading} onClick={() => void loadServers()}><RefreshCw className={cn(isLoading && "animate-spin")} />刷新</Button>
           </div>
         </div>
 
