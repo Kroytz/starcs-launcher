@@ -72,10 +72,14 @@ import {
 import {
   fetchLauncherBootstrap,
   loginLauncherAccount,
+  type LauncherAccount,
   type LauncherAnnouncement,
   type LauncherBootstrap,
   type LauncherInventoryItem,
-  type LauncherProfile,
+  type LauncherMapResource,
+  type LauncherPenalty,
+  type LauncherPurchaseHistoryItem,
+  type LauncherSeasonPass,
 } from "@/lib/launcher-api"
 import {
   getLocalSteamAccount,
@@ -213,7 +217,7 @@ function LoginDialog({ open, onOpenChange, account, isLoading, isSubmitting, acc
   )
 }
 
-function HomePage({ announcement, backendError, isBackendLoading, onRetryBackend }: { announcement: LauncherAnnouncement | null; backendError: string | null; isBackendLoading: boolean; onRetryBackend: () => void }) {
+function HomePage({ announcement, maps, backendError, isBackendLoading, onRetryBackend }: { announcement: LauncherAnnouncement | null; maps: LauncherMapResource[]; backendError: string | null; isBackendLoading: boolean; onRetryBackend: () => void }) {
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<"all" | "online">("all")
   const [sort, setSort] = useState<ServerSort>("players")
@@ -271,6 +275,10 @@ function HomePage({ announcement, backendError, isBackendLoading, onRetryBackend
       return b.players - a.players || a.name.localeCompare(b.name, "zh-CN")
     })
   const selected = servers.find((server) => server.id === selectedId)
+  const selectedMap = selected ? maps.find((map) => {
+    const serverMapNames = [selected.map, selected.mapName].map((value) => value.trim().toLowerCase())
+    return serverMapNames.includes(map.name.trim().toLowerCase()) || serverMapNames.includes(map.shortName.trim().toLowerCase())
+  }) : undefined
   const onlinePlayers = servers.reduce((sum, server) => sum + server.players, 0)
   const joinableCount = servers.filter(isServerJoinable).length
 
@@ -390,7 +398,7 @@ function HomePage({ announcement, backendError, isBackendLoading, onRetryBackend
               </div>
             </CardHeader>
             <CardContent>
-              <div className="detail-map"><div className={cn("absolute inset-0 bg-gradient-to-br opacity-30", selected.color)} /><Map className="relative size-8 text-white/80" /><div className="relative min-w-0 text-center"><div className="text-xs text-white/60">当前地图</div><div className="mt-0.5 truncate font-medium text-white">{selected.map}</div></div></div>
+              <div className="detail-map"><div className={cn("absolute inset-0 bg-gradient-to-br opacity-30", selected.color)} /><Map className="relative size-8 text-white/80" /><div className="relative min-w-0 text-center"><div className="text-xs text-white/60">当前地图</div><div className="mt-0.5 truncate font-medium text-white">{selected.map}</div>{selectedMap && <div className="mt-1 flex flex-wrap justify-center gap-x-2 text-[10px] text-white/60"><span>难度 {selectedMap.difficulty || "未标注"}</span>{selectedMap.workshopId && <span>Workshop {selectedMap.workshopId}</span>}</div>}</div></div>
               <div className="my-4 grid grid-cols-3 divide-x divide-border rounded-lg border border-border bg-background/50 py-3 text-center">
                 <div><Users className="mx-auto mb-1 size-4 text-muted-foreground" /><div className="text-sm font-medium">{selected.players}/{selected.capacity}</div><div className="text-[10px] text-muted-foreground">玩家</div></div>
                 <div><Signal className="mx-auto mb-1 size-4 text-muted-foreground" /><div className="text-sm font-medium">{selected.ping !== null ? `${selected.ping}ms` : "—"}</div><div className="text-[10px] text-muted-foreground">A2S 延迟</div></div>
@@ -417,92 +425,52 @@ type CurrencyPopup = "recharge" | StoreCurrency
 function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBootstrap; isAuthenticated: boolean; onRequireLogin: () => void }) {
   const [activeStore, setActiveStore] = useState<StoreCurrency>("starlight")
   const [currencyPopup, setCurrencyPopup] = useState<CurrencyPopup | null>(null)
-  const [starCoins, setStarCoins] = useState(data.account.wallet.starCoin)
-  const [starlight, setStarlight] = useState(data.account.wallet.starlight)
-  const [stardust, setStardust] = useState(data.account.wallet.stardust)
   const [exchangeAmount, setExchangeAmount] = useState("1")
   const [storeNotice, setStoreNotice] = useState<string | null>(null)
 
-  useEffect(() => {
-    setStarCoins(data.account.wallet.starCoin)
-    setStarlight(data.account.wallet.starlight)
-    setStardust(data.account.wallet.stardust)
-  }, [data.account.wallet])
-
   const activeItems = data.storeItems.filter((item) => item.enabled && item.currency === activeStore)
-  const activeBalance = activeStore === "starlight" ? starlight : stardust
+  const wallet = data.account.wallet
+  const activeBalance = activeStore === "starlight" ? wallet.starlight : wallet.stardust
+  const activeBalanceAvailable = activeStore === "starlight" ? wallet.starlightAvailable : wallet.stardustAvailable
   const parsedExchangeAmount = Math.max(0, Math.floor(Number(exchangeAmount) || 0))
   const exchangeRate = (target: StoreCurrency) => data.account.exchangeRates.find((item) => item.from === "starCoin" && item.to === target)?.rate ?? 0
+  const balanceLabel = (value: number, available: boolean) => !isAuthenticated ? "—" : available ? value.toLocaleString() : "暂无数据"
 
   function exchange(target: StoreCurrency) {
     if (!isAuthenticated) {
       onRequireLogin()
       return
     }
-    if (parsedExchangeAmount < 1) {
-      setStoreNotice("请输入至少 1 枚星币。")
-      return
-    }
-    if (parsedExchangeAmount > starCoins) {
-      setStoreNotice("星币余额不足。")
-      return
-    }
-
-    const rate = exchangeRate(target)
-    if (rate <= 0) {
-      setStoreNotice("后端未配置该货币的兑换比例。")
-      return
-    }
-
-    setStarCoins((current) => current - parsedExchangeAmount)
-    if (target === "starlight") {
-      const received = parsedExchangeAmount * rate
-      setStarlight((current) => current + received)
-      setStoreNotice(`已将 ${parsedExchangeAmount} 星币兑换为 ${received} 星光。`)
-    } else {
-      const received = parsedExchangeAmount * rate
-      setStardust((current) => current + received)
-      setStoreNotice(`已将 ${parsedExchangeAmount} 星币兑换为 ${received} 星尘。`)
-    }
+    setStoreNotice(`当前数据库账号仅有读取权限，暂不能执行星币兑换${target === "starlight" ? "星光" : "星尘"}。`)
     setCurrencyPopup(null)
   }
 
-  function purchase(title: string, price: number) {
+  function purchase(title: string) {
     if (!isAuthenticated) {
       onRequireLogin()
       return
     }
-    if (price > activeBalance) {
-      setStoreNotice(`${activeStore === "starlight" ? "星光" : "星尘"}余额不足。`)
-      return
-    }
-
-    if (activeStore === "starlight") {
-      setStarlight((current) => current - price)
-    } else {
-      setStardust((current) => current - price)
-    }
-    setStoreNotice(`已购买「${title}」（演示数据，不会产生真实交易）。`)
+    setStoreNotice(`「${title}」来自真实商品表；当前后端只读，购买暂未开放。`)
   }
 
   return (
     <main className="page-shell">
       <PageHeading eyebrow="STAR 商城" title="星社区兑换中心" description="管理三种货币，并在星光商店与星尘商店兑换不同物品。" />
 
-      {!isAuthenticated && <div className="mb-5 flex flex-col justify-between gap-3 rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><span>登录后可查看余额，并进行充值、兑换与购买。</span><Button size="sm" onClick={onRequireLogin}><LogIn />登录</Button></div>}
+      {!isAuthenticated && <div className="mb-5 flex flex-col justify-between gap-3 rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><span>登录后可查看真实余额、购买记录与商城数据；交易功能暂未开放。</span><Button size="sm" onClick={onRequireLogin}><LogIn />登录</Button></div>}
 
       <div className="currency-grid">
         <Card className="currency-card currency-card-coin">
           <CardContent className="relative flex items-center gap-4 p-5">
             <div className="currency-icon bg-accent/15 text-accent"><Coins /></div>
-            <div className="min-w-0 flex-1"><div className="text-xs font-medium text-muted-foreground">星币</div><div className="mt-1 flex items-center gap-2"><span className="text-2xl font-semibold tabular-nums">{isAuthenticated ? starCoins.toLocaleString() : "—"}</span><Button variant="outline" size="icon" className="size-7 rounded-full" aria-label="充值星币" title={isAuthenticated ? "充值星币" : "登录后充值"} onClick={() => isAuthenticated ? setCurrencyPopup("recharge") : onRequireLogin()}><Plus /></Button></div></div>
+            <div className="min-w-0 flex-1"><div className="text-xs font-medium text-muted-foreground">星币</div><div className="mt-1 flex items-center gap-2"><span className="text-2xl font-semibold tabular-nums">{balanceLabel(wallet.starCoin, wallet.starCoinAvailable)}</span><Button variant="outline" size="icon" className="size-7 rounded-full" aria-label="充值星币" title={isAuthenticated ? "查看充值入口" : "登录后充值"} onClick={() => isAuthenticated ? setCurrencyPopup("recharge") : onRequireLogin()}><Plus /></Button></div></div>
           </CardContent>
         </Card>
         <Card className="currency-card currency-card-starlight">
-          <CardContent className="relative flex items-center gap-4 p-5"><div className="currency-icon bg-primary/15 text-primary"><Sparkles /></div><div><div className="text-xs font-medium text-muted-foreground">星光</div><div className="mt-1 flex items-center gap-2"><span className="text-2xl font-semibold tabular-nums">{isAuthenticated ? starlight.toLocaleString() : "—"}</span><Button variant="outline" size="icon" className="size-7 rounded-full" aria-label="兑换星光" title={isAuthenticated ? "使用星币兑换星光" : "登录后兑换"} onClick={() => isAuthenticated ? setCurrencyPopup("starlight") : onRequireLogin()}><Plus /></Button></div></div></CardContent>
+          <CardContent className="relative flex items-center gap-4 p-5"><div className="currency-icon bg-primary/15 text-primary"><Sparkles /></div><div><div className="text-xs font-medium text-muted-foreground">星光</div><div className="mt-1 flex items-center gap-2"><span className="text-2xl font-semibold tabular-nums">{balanceLabel(wallet.starlight, wallet.starlightAvailable)}</span><Button variant="outline" size="icon" className="size-7 rounded-full" aria-label="兑换星光" title={isAuthenticated ? "查看星光兑换" : "登录后兑换"} onClick={() => isAuthenticated ? setCurrencyPopup("starlight") : onRequireLogin()}><Plus /></Button></div></div></CardContent>
         </Card>
         <Card className="currency-card currency-card-stardust">
-          <CardContent className="relative flex items-center gap-4 p-5"><div className="currency-icon bg-secondary/15 text-secondary"><Gem /></div><div><div className="text-xs font-medium text-muted-foreground">星尘</div><div className="mt-1 flex items-center gap-2"><span className="text-2xl font-semibold tabular-nums">{isAuthenticated ? stardust.toLocaleString() : "—"}</span><Button variant="outline" size="icon" className="size-7 rounded-full" aria-label="兑换星尘" title={isAuthenticated ? "使用星币兑换星尘" : "登录后兑换"} onClick={() => isAuthenticated ? setCurrencyPopup("stardust") : onRequireLogin()}><Plus /></Button></div></div></CardContent>
+          <CardContent className="relative flex items-center gap-4 p-5"><div className="currency-icon bg-secondary/15 text-secondary"><Gem /></div><div><div className="text-xs font-medium text-muted-foreground">星尘</div><div className="mt-1 flex items-center gap-2"><span className="text-2xl font-semibold tabular-nums">{balanceLabel(wallet.stardust, wallet.stardustAvailable)}</span><Button variant="outline" size="icon" className="size-7 rounded-full" aria-label="兑换星尘" title={isAuthenticated ? "查看星尘兑换" : "登录后兑换"} onClick={() => isAuthenticated ? setCurrencyPopup("stardust") : onRequireLogin()}><Plus /></Button></div></div></CardContent>
         </Card>
       </div>
 
@@ -511,13 +479,13 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
           {currencyPopup === "recharge" ? (
             <>
               <DialogHeader><DialogTitle className="flex items-center gap-2"><Coins className="size-5 text-accent" />充值星币</DialogTitle><DialogDescription>{data.app.rechargeEnabled ? "请选择充值档位。" : "充值入口已预留，后续可在此接入支付渠道和充值档位。"}</DialogDescription></DialogHeader>
-              <div className="rounded-xl border border-dashed border-accent/30 bg-accent/10 px-5 py-8 text-center"><div className="mx-auto mb-3 grid size-12 place-items-center rounded-full bg-accent/15 text-accent"><Plus /></div><div className="font-medium">充值功能暂未开放</div><div className="mt-1 text-xs text-muted-foreground">当前星币余额：{starCoins.toLocaleString()}</div></div>
+              <div className="rounded-xl border border-dashed border-accent/30 bg-accent/10 px-5 py-8 text-center"><div className="mx-auto mb-3 grid size-12 place-items-center rounded-full bg-accent/15 text-accent"><Plus /></div><div className="font-medium">充值功能暂未开放</div><div className="mt-1 text-xs text-muted-foreground">当前星币余额：{balanceLabel(wallet.starCoin, wallet.starCoinAvailable)}</div></div>
               <DialogFooter><DialogClose asChild><Button variant="outline">关闭</Button></DialogClose><Button disabled={!data.app.rechargeEnabled}>立即充值</Button></DialogFooter>
             </>
           ) : currencyPopup ? (
             <>
-              <DialogHeader><DialogTitle className="flex items-center gap-2">{currencyPopup === "starlight" ? <Sparkles className="size-5 text-primary" /> : <Gem className="size-5 text-secondary" />}星币兑换{currencyPopup === "starlight" ? "星光" : "星尘"}</DialogTitle><DialogDescription>1 星币可以兑换 {exchangeRate(currencyPopup)} {currencyPopup === "starlight" ? "星光" : "星尘"}，兑换后无法撤销。</DialogDescription></DialogHeader>
-              <div className="space-y-4"><div><label className="mb-2 block text-sm font-medium" htmlFor="exchange-amount">兑换星币数量</label><Input id="exchange-amount" type="number" min="1" max={starCoins} value={exchangeAmount} onChange={(event) => setExchangeAmount(event.target.value)} /></div><div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 px-4 py-3 text-sm"><span className="text-muted-foreground">预计获得</span><span className="flex items-center gap-1.5 font-semibold">{currencyPopup === "starlight" ? <Sparkles className="size-4 text-primary" /> : <Gem className="size-4 text-secondary" />}{parsedExchangeAmount * exchangeRate(currencyPopup)} {currencyPopup === "starlight" ? "星光" : "星尘"}</span></div></div>
+              <DialogHeader><DialogTitle className="flex items-center gap-2">{currencyPopup === "starlight" ? <Sparkles className="size-5 text-primary" /> : <Gem className="size-5 text-secondary" />}星币兑换{currencyPopup === "starlight" ? "星光" : "星尘"}</DialogTitle><DialogDescription>{exchangeRate(currencyPopup) > 0 ? `当前展示比例为 1:${exchangeRate(currencyPopup)}；数据库连接为只读，暂不能提交兑换。` : "当前数据库没有可用的兑换比例，兑换暂未开放。"}</DialogDescription></DialogHeader>
+              <div className="space-y-4"><div><label className="mb-2 block text-sm font-medium" htmlFor="exchange-amount">兑换星币数量</label><Input id="exchange-amount" type="number" min="1" value={exchangeAmount} onChange={(event) => setExchangeAmount(event.target.value)} /></div><div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 px-4 py-3 text-sm"><span className="text-muted-foreground">预计获得</span><span className="flex items-center gap-1.5 font-semibold">{currencyPopup === "starlight" ? <Sparkles className="size-4 text-primary" /> : <Gem className="size-4 text-secondary" />}{parsedExchangeAmount * exchangeRate(currencyPopup)} {currencyPopup === "starlight" ? "星光" : "星尘"}</span></div></div>
               <DialogFooter><DialogClose asChild><Button variant="outline">取消</Button></DialogClose><Button variant={currencyPopup === "starlight" ? "default" : "secondary"} onClick={() => exchange(currencyPopup)}><ArrowRightLeft />确认兑换</Button></DialogFooter>
             </>
           ) : null}
@@ -529,20 +497,20 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
           <Button variant={activeStore === "starlight" ? "secondary" : "ghost"} onClick={() => setActiveStore("starlight")}><Sparkles />星光商店</Button>
           <Button variant={activeStore === "stardust" ? "secondary" : "ghost"} onClick={() => setActiveStore("stardust")}><Gem />星尘商店</Button>
         </div>
-        <div className="text-sm text-muted-foreground">当前余额：<span className="font-semibold text-foreground">{isAuthenticated ? `${activeBalance.toLocaleString()} ${activeStore === "starlight" ? "星光" : "星尘"}` : "登录后查看"}</span></div>
+        <div className="text-sm text-muted-foreground">当前余额：<span className="font-semibold text-foreground">{!isAuthenticated ? "登录后查看" : activeBalanceAvailable ? `${activeBalance.toLocaleString()} ${activeStore === "starlight" ? "星光" : "星尘"}` : "当前数据库暂无数据"}</span></div>
       </div>
 
       {storeNotice && <div className="mt-4 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-foreground">{storeNotice}</div>}
 
+      {activeItems.length === 0 && <Card className="mt-4"><CardContent className="py-12 text-center text-sm text-muted-foreground">{activeStore === "stardust" ? "当前数据库暂无星尘商品映射。" : "当前没有可展示的商品。"}</CardContent></Card>}
       <div className="store-grid mt-4">
         {activeItems.map((item) => {
           const Icon = displayIcons[item.icon] ?? Package
-          const canAfford = item.price <= activeBalance
           return (
             <Card key={item.id} className="store-card overflow-hidden">
-              <div className={cn("grid h-32 place-items-center bg-gradient-to-br", item.tone)}><Icon className="size-12 text-white/90" /></div>
+              <div className={cn("relative grid h-32 place-items-center overflow-hidden bg-gradient-to-br", item.tone)}>{item.imageUrl ? <img src={item.imageUrl} alt="" className="absolute inset-0 size-full object-cover" onError={(event) => { event.currentTarget.style.display = "none" }} /> : null}<Icon className="size-12 text-white/90" /></div>
               <CardHeader><div className="flex items-center justify-between"><Badge variant="secondary">{item.tag}</Badge><span className="flex items-center gap-1 font-semibold text-primary">{activeStore === "starlight" ? <Sparkles className="size-3.5" /> : <Gem className="size-3.5" />}{item.price}</span></div><CardTitle className="pt-3 text-base">{item.title}</CardTitle><CardDescription>{item.description}</CardDescription></CardHeader>
-              <CardContent><Button className="w-full" variant={!isAuthenticated || canAfford ? "outline" : "ghost"} disabled={isAuthenticated && !canAfford} onClick={() => purchase(item.title, item.price)}>{!isAuthenticated ? "登录后购买" : canAfford ? "购买" : "余额不足"}</Button></CardContent>
+              <CardContent><Button className="w-full" variant="outline" onClick={() => purchase(item.title)}>{!isAuthenticated ? "登录后查看" : "只读展示"}</Button></CardContent>
             </Card>
           )
         })}
@@ -657,13 +625,7 @@ function InventoryPage({ items, isAuthenticated, onRequireLogin }: { items: Laun
       return
     }
 
-    if (item.type === "消耗品" || item.type === "增益道具") {
-      setInventory((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, quantity: Math.max(0, candidate.quantity - 1) } : candidate))
-      setInventoryNotice(`已使用「${item.name}」，本次运行内剩余 ${Math.max(0, item.quantity - 1)}。`)
-      return
-    }
-
-    setInventoryNotice(`已启用「${item.name}」。`)
+    setInventoryNotice(`「${item.name}」来自真实库存；当前后端只读，使用物品暂未开放。`)
   }
 
   function toggleEquipmentMode(mode: string) {
@@ -685,7 +647,7 @@ function InventoryPage({ items, isAuthenticated, onRequireLogin }: { items: Laun
       return next
     })
     const teamLabel = equipmentTeam === "all" ? "所有阵营" : equipmentTeam.toUpperCase()
-    setInventoryNotice(`已为 ${selectedEquipmentModes.length} 个模式 · ${teamLabel} 装备「${equippingItem.name}」。`)
+    setInventoryNotice(`已将「${equippingItem.name}」保存到本机配置：${selectedEquipmentModes.length} 个模式 · ${teamLabel}（尚未同步服务器）。`)
     setEquippingItem(null)
   }
 
@@ -703,7 +665,7 @@ function InventoryPage({ items, isAuthenticated, onRequireLogin }: { items: Laun
       }
       return next
     })
-    setInventoryNotice(`已清除 ${selectedEquipmentModes.length * targetTeams.length} 个外观配置。`)
+    setInventoryNotice(`已从本机清除 ${selectedEquipmentModes.length * targetTeams.length} 个外观配置（尚未同步服务器）。`)
     setEquippingItem(null)
   }
 
@@ -716,7 +678,7 @@ function InventoryPage({ items, isAuthenticated, onRequireLogin }: { items: Laun
 
   return (
     <main className="page-shell inventory-page-shell">
-      <PageHeading eyebrow="我的库存" title="已拥有的物品" description="右键物品即可使用；武器和玩家外观可按模式与阵营分别装备。" action={<Button variant="outline"><Boxes />全部物品 {inventory.length}</Button>} />
+      <PageHeading eyebrow="我的库存" title="已拥有的物品" description="库存来自真实数据库；外观配置仅保存在本机，使用与同步暂未开放。" action={<Button variant="outline"><Boxes />全部物品 {inventory.length}</Button>} />
       {!isAuthenticated && <div className="mb-4 flex flex-col justify-between gap-3 rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><span>登录后可使用消耗品，并配置武器与玩家外观。</span><Button size="sm" onClick={onRequireLogin}><LogIn />登录</Button></div>}
       {inventoryNotice && <div className="mb-4 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm">{inventoryNotice}</div>}
       <div className="inventory-grid">
@@ -762,9 +724,17 @@ function InventoryPage({ items, isAuthenticated, onRequireLogin }: { items: Laun
   )
 }
 
-function ProfilePage({ profile, steamAccount, isAuthenticated, theme, onThemeChange, onLogin, onLogout }: { profile: LauncherProfile | null; steamAccount: LocalSteamAccount | null; isAuthenticated: boolean; theme: ThemePreference; onThemeChange: (theme: ThemePreference) => void; onLogin: () => void; onLogout: () => void }) {
+function formatLauncherDate(value: string) {
+  if (!value) return "—"
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" })
+}
+
+function ProfilePage({ account, purchaseHistory, seasonPass, penalties, steamAccount, isAuthenticated, theme, onThemeChange, onLogin, onLogout }: { account: LauncherAccount | null; purchaseHistory: LauncherPurchaseHistoryItem[]; seasonPass: LauncherSeasonPass | null; penalties: LauncherPenalty[]; steamAccount: LocalSteamAccount | null; isAuthenticated: boolean; theme: ThemePreference; onThemeChange: (theme: ThemePreference) => void; onLogin: () => void; onLogout: () => void }) {
+  const profile = account?.profile ?? null
   const displayName = isAuthenticated ? steamAccount?.personaName || profile?.displayName || "StarCS 玩家" : "未登录"
   const avatarUrl = steamAccount?.avatarDataUrl || profile?.avatarUrl || starLogo
+  const wallet = account?.wallet
 
   return (
     <main className="page-shell">
@@ -775,7 +745,7 @@ function ProfilePage({ profile, steamAccount, isAuthenticated, theme, onThemeCha
           <CardContent className="relative pt-0">
             <div className="profile-avatar">{isAuthenticated ? <img src={avatarUrl} alt={displayName} onError={(event) => { event.currentTarget.src = starLogo }} /> : <UserRound className="size-10 text-white/70" aria-label="默认头像" />}</div>
             <div className="pt-14"><div className="flex items-center gap-2"><h2 className="text-xl font-semibold">{displayName}</h2>{isAuthenticated && profile?.verified && <Badge variant="success"><Check />已验证</Badge>}</div><p className="mt-1 text-sm text-muted-foreground">{isAuthenticated ? `StarCS 社区成员 · Lv. ${profile?.memberLevel ?? "—"}` : "登录后解锁账户福利与便捷管理功能"}</p></div>
-            {isAuthenticated && profile ? <div className="mt-5 grid grid-cols-3 divide-x divide-border rounded-lg border border-border py-3 text-center"><div><div className="font-semibold">{profile.playHours}</div><div className="text-[11px] text-muted-foreground">游戏时长</div></div><div><div className="font-semibold">{profile.communityLevel}</div><div className="text-[11px] text-muted-foreground">社区等级</div></div><div><div className="font-semibold">{profile.achievements}</div><div className="text-[11px] text-muted-foreground">成就</div></div></div> : <div className="mt-5 rounded-lg border border-border bg-muted/25 p-4 text-sm text-muted-foreground">登录可以享受登录器专属福利，同时更方便地管理库存、使用物品，并为不同模式和阵营配置装备。</div>}
+            {isAuthenticated && profile ? <div className="mt-5 grid grid-cols-3 divide-x divide-border rounded-lg border border-border py-3 text-center"><div><div className="font-semibold">{profile.playHours}</div><div className="text-[11px] text-muted-foreground">游戏时长</div></div><div><div className="font-semibold">{wallet?.starlightAvailable ? wallet.starlight.toLocaleString() : "—"}</div><div className="text-[11px] text-muted-foreground">星光</div></div><div><div className="font-semibold">{purchaseHistory.length}</div><div className="text-[11px] text-muted-foreground">购买记录</div></div></div> : <div className="mt-5 rounded-lg border border-border bg-muted/25 p-4 text-sm text-muted-foreground">登录可以享受登录器专属福利，同时更方便地管理库存、使用物品，并为不同模式和阵营配置装备。</div>}
             <Button className="mt-4 w-full" variant={isAuthenticated ? "outline" : "default"} onClick={isAuthenticated ? onLogout : onLogin}>{isAuthenticated ? "退出登录" : <><LogIn />登录</>}</Button>
           </CardContent>
         </Card>
@@ -786,9 +756,13 @@ function ProfilePage({ profile, steamAccount, isAuthenticated, theme, onThemeCha
             <CardContent><ThemeSwitcher value={theme} onChange={onThemeChange} /></CardContent>
           </Card>
           <Card>
-            <CardHeader><div className="flex items-center gap-3"><div className="setting-icon"><ShieldCheck /></div><div><CardTitle>账户安全</CardTitle><CardDescription>{isAuthenticated ? "你的 StarCS 账户当前状态正常。" : "登录时会自动识别当前 Steam 账号。"}</CardDescription></div></div></CardHeader>
-            <CardContent className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-4"><div><div className="text-sm font-medium">{isAuthenticated ? `Steam ${profile?.steamConnected ? "已连接" : "未连接"}` : "尚未登录 StarCS"}</div><div className="mt-1 text-xs text-muted-foreground">{isAuthenticated && steamAccount ? `${steamAccount.personaName} · ${steamAccount.steamId}` : "点击登录后识别当前 Steam Session"}</div></div><Badge variant={isAuthenticated && profile?.steamConnected ? "success" : "outline"}>{isAuthenticated && profile?.steamConnected && <Check />}{isAuthenticated ? profile?.steamConnected ? "正常" : "待连接" : "未登录"}</Badge></CardContent>
+            <CardHeader><div className="flex items-center gap-3"><div className="setting-icon"><ShieldCheck /></div><div><CardTitle>账户安全</CardTitle><CardDescription>{isAuthenticated ? penalties.length > 0 ? `当前有 ${penalties.length} 条生效中的处罚记录。` : "没有查询到生效中的处罚记录。" : "登录时会自动识别当前 Steam 账号。"}</CardDescription></div></div></CardHeader>
+            <CardContent className="space-y-3"><div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-4"><div><div className="text-sm font-medium">{isAuthenticated ? `Steam ${profile?.steamConnected ? "已连接" : "未连接"}` : "尚未登录 StarCS"}</div><div className="mt-1 text-xs text-muted-foreground">{isAuthenticated && steamAccount ? `${steamAccount.personaName} · ${steamAccount.steamId}` : "点击登录后识别当前 Steam Session"}</div></div><Badge variant={isAuthenticated && profile?.steamConnected && penalties.length === 0 ? "success" : "outline"}>{isAuthenticated && profile?.steamConnected && penalties.length === 0 && <Check />}{!isAuthenticated ? "未登录" : penalties.length > 0 ? `${penalties.length} 条处罚` : profile?.steamConnected ? "正常" : "待连接"}</Badge></div>{penalties.map((penalty, index) => <div key={`${penalty.type}-${penalty.createdAt}-${index}`} className="rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm"><div className="flex justify-between gap-3"><span className="font-medium text-red-600 dark:text-red-300">{penalty.type || "账户处罚"}</span><span className="text-xs text-muted-foreground">{penalty.permanent ? "永久" : `至 ${formatLauncherDate(penalty.expiresAt)}`}</span></div><div className="mt-1 text-xs text-muted-foreground">{penalty.reason || "未提供原因"}{penalty.mode ? ` · ${penalty.mode}` : ""}</div></div>)}</CardContent>
           </Card>
+
+          {isAuthenticated && seasonPass?.available && <Card><CardHeader><div className="flex items-center gap-3"><div className="setting-icon"><Trophy /></div><div><CardTitle>赛季通行证 · 第 {seasonPass.seasonId} 赛季</CardTitle><CardDescription>真实赛季进度，最近更新于 {formatLauncherDate(seasonPass.updatedAt)}。</CardDescription></div></div></CardHeader><CardContent><div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">Lv. {seasonPass.level}</div><div className="text-xs text-muted-foreground">通行证等级</div></div><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">{seasonPass.experience}</div><div className="text-xs text-muted-foreground">经验</div></div><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">{seasonPass.claimedRewardCount}</div><div className="text-xs text-muted-foreground">已领礼包</div></div><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">{seasonPass.starSourceChestOpened}</div><div className="text-xs text-muted-foreground">已开宝箱</div></div></div><div className="mt-3 grid grid-cols-2 gap-3 text-sm"><div className="rounded-lg border border-border px-3 py-2"><span className="text-muted-foreground">今日游戏</span><span className="float-right font-medium">{seasonPass.dailyGames} 局 / {seasonPass.dailyOnlineMinutes} 分钟</span></div><div className="rounded-lg border border-border px-3 py-2"><span className="text-muted-foreground">本周进度</span><span className="float-right font-medium">{seasonPass.weeklyGames} 局 / {seasonPass.weeklyCompletedModes} 模式</span></div></div></CardContent></Card>}
+
+          {isAuthenticated && <Card><CardHeader><div className="flex items-center gap-3"><div className="setting-icon"><ShoppingBag /></div><div><CardTitle>最近购买记录</CardTitle><CardDescription>从数据库读取最近 {Math.min(purchaseHistory.length, 8)} 条记录。</CardDescription></div></div></CardHeader><CardContent>{purchaseHistory.length === 0 ? <div className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">暂无购买记录</div> : <div className="divide-y divide-border rounded-lg border border-border">{purchaseHistory.slice(0, 8).map((item) => <div key={item.id} className="flex items-center justify-between gap-4 px-4 py-3"><div className="min-w-0"><div className="truncate text-sm font-medium">{item.productName}</div><div className="mt-1 text-xs text-muted-foreground">{item.description || `${item.quantity} 件${item.days > 0 ? ` · ${item.days} 天` : ""}`} · {formatLauncherDate(item.createdAt)}</div></div><div className="shrink-0 text-right"><div className="text-sm font-semibold">{item.totalPrice.toLocaleString()}</div><div className="text-[10px] text-muted-foreground">{item.currencyType || "货币"}</div></div></div>)}</div>}</CardContent></Card>}
         </div>
       </div>
     </main>
@@ -806,7 +780,11 @@ function App() {
   const [rememberPassword, setRememberPassword] = useState(false)
   const [loginError, setLoginError] = useState<string | null>(null)
   const [authToken, setAuthToken] = useState<string | null>(null)
+  const [authenticatedAccount, setAuthenticatedAccount] = useState<LauncherAccount | null>(null)
   const [authenticatedInventory, setAuthenticatedInventory] = useState<LauncherInventoryItem[] | null>(null)
+  const [purchaseHistory, setPurchaseHistory] = useState<LauncherPurchaseHistoryItem[]>([])
+  const [seasonPass, setSeasonPass] = useState<LauncherSeasonPass | null>(null)
+  const [penalties, setPenalties] = useState<LauncherPenalty[]>([])
   const [isLoginSubmitting, setIsLoginSubmitting] = useState(false)
   const [loginOpen, setLoginOpen] = useState(false)
   const [bootstrap, setBootstrap] = useState<LauncherBootstrap | null>(null)
@@ -814,6 +792,8 @@ function App() {
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
   const bootstrapFetchStarted = useRef(false)
   const isAuthenticated = authToken !== null
+  const effectiveAccount = isAuthenticated ? authenticatedAccount : bootstrap?.account ?? null
+  const effectiveBootstrap = bootstrap && effectiveAccount ? { ...bootstrap, account: effectiveAccount } : bootstrap
 
   const loadSteamSession = useCallback(async () => {
     setIsSteamAccountLoading(true)
@@ -896,7 +876,11 @@ function App() {
     try {
       const session = await loginLauncherAccount(steamAccount.steamId, password)
       await updateRememberedPassword(steamAccount.steamId, rememberPassword ? password : null)
+      setAuthenticatedAccount(session.account)
       setAuthenticatedInventory(session.inventory)
+      setPurchaseHistory(session.purchaseHistory)
+      setSeasonPass(session.seasonPass)
+      setPenalties(session.penalties)
       setAuthToken(session.token)
       setLoginOpen(false)
     } catch (error) {
@@ -908,7 +892,11 @@ function App() {
 
   function logout() {
     setAuthToken(null)
+    setAuthenticatedAccount(null)
     setAuthenticatedInventory(null)
+    setPurchaseHistory([])
+    setSeasonPass(null)
+    setPenalties([])
   }
 
   return (
@@ -933,10 +921,10 @@ function App() {
         </div>
       </header>
 
-      {activeTab === "home" && <HomePage announcement={bootstrap?.announcements[0] ?? null} backendError={bootstrapError} isBackendLoading={isBootstrapLoading} onRetryBackend={() => void loadLauncherData()} />}
-      {activeTab === "store" && (bootstrap ? <StorePage data={bootstrap} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
+      {activeTab === "home" && <HomePage announcement={bootstrap?.announcements[0] ?? null} maps={bootstrap?.maps ?? []} backendError={bootstrapError} isBackendLoading={isBootstrapLoading} onRetryBackend={() => void loadLauncherData()} />}
+      {activeTab === "store" && (effectiveBootstrap ? <StorePage data={effectiveBootstrap} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
       {activeTab === "inventory" && (bootstrap ? <InventoryPage items={isAuthenticated ? authenticatedInventory ?? [] : bootstrap.inventory} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
-      {activeTab === "profile" && <ProfilePage profile={bootstrap?.account.profile ?? null} steamAccount={steamAccount} isAuthenticated={isAuthenticated} theme={theme} onThemeChange={setTheme} onLogin={openLogin} onLogout={logout} />}
+      {activeTab === "profile" && <ProfilePage account={effectiveAccount} purchaseHistory={purchaseHistory} seasonPass={seasonPass} penalties={penalties} steamAccount={steamAccount} isAuthenticated={isAuthenticated} theme={theme} onThemeChange={setTheme} onLogin={openLogin} onLogout={logout} />}
     </div>
   )
 }

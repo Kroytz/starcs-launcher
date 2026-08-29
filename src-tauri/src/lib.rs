@@ -64,6 +64,7 @@ struct LauncherBootstrap {
     account: LauncherAccount,
     store_items: Vec<LauncherStoreItem>,
     inventory: Vec<LauncherInventoryItem>,
+    maps: Vec<LauncherMapResource>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -114,6 +115,9 @@ struct LauncherWallet {
     star_coin: i64,
     starlight: i64,
     stardust: i64,
+    star_coin_available: bool,
+    starlight_available: bool,
+    stardust_available: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -137,6 +141,7 @@ struct LauncherStoreItem {
     tag: String,
     enabled: bool,
     sort: i32,
+    image_url: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -157,7 +162,64 @@ struct LauncherInventoryItem {
 struct LauncherLoginSession {
     token: String,
     expires_at: String,
+    account: LauncherAccount,
     inventory: Vec<LauncherInventoryItem>,
+    purchase_history: Vec<LauncherPurchaseHistoryItem>,
+    season_pass: LauncherSeasonPass,
+    penalties: Vec<LauncherPenalty>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LauncherMapResource {
+    id: u64,
+    name: String,
+    short_name: String,
+    workshop_id: String,
+    difficulty: String,
+    description: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LauncherPurchaseHistoryItem {
+    id: u64,
+    product_name: String,
+    currency_type: String,
+    quantity: u64,
+    days: i32,
+    total_price: i64,
+    state: i32,
+    description: String,
+    created_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LauncherSeasonPass {
+    available: bool,
+    season_id: i32,
+    pass_type: i32,
+    level: i32,
+    experience: i32,
+    claimed_reward_count: i32,
+    star_source_chest_opened: i32,
+    daily_games: i32,
+    daily_online_minutes: i32,
+    weekly_games: i32,
+    weekly_completed_modes: i32,
+    updated_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LauncherPenalty {
+    r#type: String,
+    reason: String,
+    mode: String,
+    permanent: bool,
+    expires_at: String,
+    created_at: String,
 }
 
 #[derive(Serialize)]
