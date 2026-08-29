@@ -258,7 +258,7 @@ function AnnouncementCenter({ announcements, isLoading, onSelect }: { announceme
   const slides = announcements.slice(0, 5)
   const latestAnnouncements = [...announcements]
     .sort((left, right) => (Date.parse(right.publishedAt) || 0) - (Date.parse(left.publishedAt) || 0))
-    .slice(0, 5)
+    .slice(0, 3)
   const [activeIndex, setActiveIndex] = useState(0)
   const [paused, setPaused] = useState(false)
   const activeAnnouncement = slides[activeIndex] ?? null
@@ -281,21 +281,21 @@ function AnnouncementCenter({ announcements, isLoading, onSelect }: { announceme
 
   return (
     <section className="grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]" aria-label="社区公告">
-      <Card className="group relative min-h-[270px] overflow-hidden" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+      <Card className="group relative h-[200px] overflow-hidden" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
         {activeAnnouncement ? <>
           <div className="absolute inset-0 bg-gradient-to-br from-primary via-secondary to-accent" />{heroImage && <img src={heroImage} alt="" className="absolute inset-0 size-full object-cover" />}
           <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/65 to-slate-950/20" />
-          <button type="button" className="absolute inset-0 z-[1] flex flex-col items-start justify-end p-6 text-left text-white" onClick={() => onSelect(activeAnnouncement)}>
+          <button type="button" className="absolute inset-0 z-[1] flex flex-col items-start justify-end p-5 text-left text-white" onClick={() => onSelect(activeAnnouncement)}>
             <div className="mb-auto flex w-full items-center justify-between"><Badge className="bg-white/15 text-white backdrop-blur-sm">社区公告</Badge><span className="text-xs text-white/65">{activeAnnouncement.displayDate}</span></div>
-            <h2 className="max-w-2xl text-2xl font-semibold tracking-tight">{activeAnnouncement.title}</h2>
-            <p className="mt-2 line-clamp-2 max-w-2xl text-sm leading-6 text-white/75">{activeAnnouncement.content}</p>
-            <span className="mt-4 flex items-center gap-1 text-xs font-medium text-white/90">查看详情<ChevronRight className="size-3.5" /></span>
+            <h2 className="max-w-2xl text-xl font-semibold tracking-tight">{activeAnnouncement.title}</h2>
+            <p className="mt-1.5 line-clamp-1 max-w-2xl text-sm leading-6 text-white/75">{activeAnnouncement.content}</p>
+            <span className="mt-2.5 flex items-center gap-1 text-xs font-medium text-white/90">查看详情<ChevronRight className="size-3.5" /></span>
           </button>
           {slides.length > 1 && <><button type="button" className="absolute left-3 top-1/2 z-[2] grid size-8 -translate-y-1/2 place-items-center rounded-full border border-white/15 bg-black/25 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/45 focus-visible:opacity-100 group-hover:opacity-100" onClick={() => move(-1)} aria-label="上一条公告"><ChevronLeft className="size-4" /></button><button type="button" className="absolute right-3 top-1/2 z-[2] grid size-8 -translate-y-1/2 place-items-center rounded-full border border-white/15 bg-black/25 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/45 focus-visible:opacity-100 group-hover:opacity-100" onClick={() => move(1)} aria-label="下一条公告"><ChevronRight className="size-4" /></button><div className="absolute bottom-4 right-5 z-[2] flex gap-1.5">{slides.map((slide, index) => <button key={slide.id} type="button" className={cn("h-1.5 rounded-full bg-white/45 transition-all", index === activeIndex ? "w-5 bg-white" : "w-1.5")} onClick={() => setActiveIndex(index)} aria-label={`切换到公告 ${index + 1}`} />)}</div></>}
-        </> : <div className="grid min-h-[270px] place-items-center text-sm text-muted-foreground">{isLoading ? <span className="flex items-center gap-2"><RefreshCw className="size-4 animate-spin" />正在加载公告…</span> : "暂无公告"}</div>}
+        </> : <div className="grid h-[200px] place-items-center text-sm text-muted-foreground">{isLoading ? <span className="flex items-center gap-2"><RefreshCw className="size-4 animate-spin" />正在加载公告…</span> : "暂无公告"}</div>}
       </Card>
 
-      <Card className="overflow-hidden"><CardHeader className="pb-3"><div className="flex items-center justify-between"><div><CardTitle className="text-base">最新公告</CardTitle><CardDescription>最近发布的 5 条社区动态</CardDescription></div><Bell className="size-5 text-primary" /></div></CardHeader><CardContent className="px-3 pb-3"><div className="divide-y divide-border">{latestAnnouncements.map((announcement) => <button key={announcement.id} type="button" className="group flex w-full items-center gap-3 rounded-md px-2 py-3 text-left hover:bg-muted/45" onClick={() => onSelect(announcement)}><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Bell className="size-3.5" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium group-hover:text-primary">{announcement.title}</span><span className="mt-1 block truncate text-xs text-muted-foreground">{announcement.content}</span></span><span className="shrink-0 text-[10px] text-muted-foreground">{announcement.displayDate}</span></button>)}{!isLoading && latestAnnouncements.length === 0 && <div className="py-12 text-center text-sm text-muted-foreground">暂无最新公告</div>}</div></CardContent></Card>
+      <Card className="h-[200px] overflow-hidden"><CardHeader className="p-4 pb-2"><div className="flex items-center justify-between"><div><CardTitle className="text-base">最新公告</CardTitle><CardDescription>最近发布的 3 条社区动态</CardDescription></div><Bell className="size-5 text-primary" /></div></CardHeader><CardContent className="px-2 pb-2"><div className="divide-y divide-border">{latestAnnouncements.map((announcement) => <button key={announcement.id} type="button" className="group flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left hover:bg-muted/45" onClick={() => onSelect(announcement)}><span className="grid size-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Bell className="size-3.5" /></span><span className="min-w-0 flex-1 truncate text-sm font-medium group-hover:text-primary">{announcement.title}</span><span className="shrink-0 text-[10px] text-muted-foreground">{announcement.displayDate}</span></button>)}{!isLoading && latestAnnouncements.length === 0 && <div className="py-10 text-center text-sm text-muted-foreground">暂无最新公告</div>}</div></CardContent></Card>
     </section>
   )
 }
@@ -378,7 +378,7 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
   }
 
   return (
-    <main className="page-shell">
+    <main className="page-shell home-page-shell">
       <AnnouncementCenter announcements={announcements} isLoading={isBackendLoading} onSelect={setSelectedAnnouncement} />
 
       <div className="mt-5 grid grid-cols-12 gap-5">
