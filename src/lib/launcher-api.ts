@@ -8,6 +8,26 @@ export type LauncherAnnouncement = {
   dismissible: boolean
   displayDate: string
   publishedAt: string
+  renderPayload: LauncherAnnouncementPayload | null
+}
+
+export type LauncherAnnouncementPayload = {
+  sections?: LauncherAnnouncementSection[]
+  footerMessage?: string
+  footerTeamName?: string
+}
+
+export type LauncherAnnouncementSection = {
+  title?: string
+  sectionType?: number
+  blocks?: LauncherAnnouncementBlock[]
+}
+
+export type LauncherAnnouncementBlock = {
+  kind: number
+  text?: string
+  imageId?: number
+  imageUrl?: string
 }
 
 export type LauncherWallet = {

@@ -36,7 +36,6 @@ import {
   Trophy,
   UserRound,
   Users,
-  X,
   Zap,
 } from "lucide-react"
 
@@ -218,23 +217,90 @@ function LoginDialog({ open, onOpenChange, account, isLoading, isSubmitting, acc
   )
 }
 
-function HomePage({ announcement, maps, backendError, isBackendLoading, onRetryBackend }: { announcement: LauncherAnnouncement | null; maps: LauncherMapResource[]; backendError: string | null; isBackendLoading: boolean; onRetryBackend: () => void }) {
+function announcementHeroImage(announcement: LauncherAnnouncement | null) {
+  if (!announcement) return ""
+  for (const section of announcement.renderPayload?.sections ?? []) {
+    for (const block of section.blocks ?? []) {
+      if (block.imageUrl) return block.imageUrl
+    }
+  }
+  return ""
+}
+
+function AnnouncementDetailDialog({ announcement, onOpenChange }: { announcement: LauncherAnnouncement | null; onOpenChange: (open: boolean) => void }) {
+  const sections = announcement?.renderPayload?.sections ?? []
+  return (
+    <Dialog open={announcement !== null} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[86vh] overflow-y-auto sm:max-w-[720px]">
+        {announcement && <>
+          <DialogHeader><div className="mb-1 flex items-center gap-2"><Badge className="bg-accent text-white">公告</Badge><span className="text-xs text-muted-foreground">{announcement.displayDate}</span></div><DialogTitle className="text-2xl">{announcement.title}</DialogTitle><DialogDescription>完整公告内容</DialogDescription></DialogHeader>
+          <div className="space-y-6">
+            {sections.length === 0 && <p className="whitespace-pre-line text-sm leading-7 text-foreground/90">{announcement.content}</p>}
+            {sections.map((section, sectionIndex) => <section key={`${section.title ?? "section"}-${sectionIndex}`} className="space-y-3"><h3 className="text-base font-semibold">{section.title || `公告内容 ${sectionIndex + 1}`}</h3>{(section.blocks ?? []).map((block, blockIndex) => block.kind === 2 && block.imageUrl ? <img key={`image-${blockIndex}`} src={block.imageUrl} alt={`${announcement.title}配图`} className="max-h-[440px] w-full rounded-xl border border-border bg-muted/20 object-contain" /> : block.text ? <p key={`text-${blockIndex}`} className="whitespace-pre-line text-sm leading-7 text-foreground/90">{block.text}</p> : null)}</section>)}
+            {(announcement.renderPayload?.footerMessage || announcement.renderPayload?.footerTeamName) && <div className="border-t border-border pt-4 text-right text-sm text-muted-foreground">{announcement.renderPayload.footerMessage && <div>{announcement.renderPayload.footerMessage}</div>}{announcement.renderPayload.footerTeamName && <div className="mt-1 font-medium text-foreground">{announcement.renderPayload.footerTeamName}</div>}</div>}
+          </div>
+        </>}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function AnnouncementCenter({ announcements, isLoading, onSelect }: { announcements: LauncherAnnouncement[]; isLoading: boolean; onSelect: (announcement: LauncherAnnouncement) => void }) {
+  const slides = announcements.slice(0, 5)
+  const [activeIndex, setActiveIndex] = useState(0)
+  const [paused, setPaused] = useState(false)
+  const activeAnnouncement = slides[activeIndex] ?? null
+  const heroImage = announcementHeroImage(activeAnnouncement)
+
+  useEffect(() => {
+    setActiveIndex((current) => slides.length === 0 ? 0 : Math.min(current, slides.length - 1))
+  }, [slides.length])
+
+  useEffect(() => {
+    if (paused || slides.length < 2) return
+    const timer = window.setInterval(() => setActiveIndex((current) => (current + 1) % slides.length), 6500)
+    return () => window.clearInterval(timer)
+  }, [paused, slides.length])
+
+  function move(direction: -1 | 1) {
+    if (slides.length < 2) return
+    setActiveIndex((current) => (current + direction + slides.length) % slides.length)
+  }
+
+  return (
+    <section className="grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]" aria-label="社区公告">
+      <Card className="group relative min-h-[270px] overflow-hidden" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+        {activeAnnouncement ? <>
+          <div className="absolute inset-0 bg-gradient-to-br from-primary via-secondary to-accent" />{heroImage && <img src={heroImage} alt="" className="absolute inset-0 size-full object-cover" />}
+          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/65 to-slate-950/20" />
+          <button type="button" className="absolute inset-0 z-[1] flex flex-col items-start justify-end p-6 text-left text-white" onClick={() => onSelect(activeAnnouncement)}>
+            <div className="mb-auto flex w-full items-center justify-between"><Badge className="bg-white/15 text-white backdrop-blur-sm">社区公告</Badge><span className="text-xs text-white/65">{activeAnnouncement.displayDate}</span></div>
+            <h2 className="max-w-2xl text-2xl font-semibold tracking-tight">{activeAnnouncement.title}</h2>
+            <p className="mt-2 line-clamp-2 max-w-2xl text-sm leading-6 text-white/75">{activeAnnouncement.content}</p>
+            <span className="mt-4 flex items-center gap-1 text-xs font-medium text-white/90">查看详情<ChevronRight className="size-3.5" /></span>
+          </button>
+          {slides.length > 1 && <><button type="button" className="absolute left-3 top-1/2 z-[2] grid size-8 -translate-y-1/2 place-items-center rounded-full border border-white/15 bg-black/25 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/45 focus-visible:opacity-100 group-hover:opacity-100" onClick={() => move(-1)} aria-label="上一条公告"><ChevronLeft className="size-4" /></button><button type="button" className="absolute right-3 top-1/2 z-[2] grid size-8 -translate-y-1/2 place-items-center rounded-full border border-white/15 bg-black/25 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/45 focus-visible:opacity-100 group-hover:opacity-100" onClick={() => move(1)} aria-label="下一条公告"><ChevronRight className="size-4" /></button><div className="absolute bottom-4 right-5 z-[2] flex gap-1.5">{slides.map((slide, index) => <button key={slide.id} type="button" className={cn("h-1.5 rounded-full bg-white/45 transition-all", index === activeIndex ? "w-5 bg-white" : "w-1.5")} onClick={() => setActiveIndex(index)} aria-label={`切换到公告 ${index + 1}`} />)}</div></>}
+        </> : <div className="grid min-h-[270px] place-items-center text-sm text-muted-foreground">{isLoading ? <span className="flex items-center gap-2"><RefreshCw className="size-4 animate-spin" />正在加载公告…</span> : "暂无公告"}</div>}
+      </Card>
+
+      <Card className="overflow-hidden"><CardHeader className="pb-3"><div className="flex items-center justify-between"><div><CardTitle className="text-base">最新公告</CardTitle><CardDescription>最近发布的 5 条社区动态</CardDescription></div><Bell className="size-5 text-primary" /></div></CardHeader><CardContent className="px-3 pb-3"><div className="divide-y divide-border">{announcements.slice(0, 5).map((announcement) => <button key={announcement.id} type="button" className="group flex w-full items-center gap-3 rounded-md px-2 py-3 text-left hover:bg-muted/45" onClick={() => onSelect(announcement)}><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Bell className="size-3.5" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium group-hover:text-primary">{announcement.title}</span><span className="mt-1 block truncate text-xs text-muted-foreground">{announcement.content}</span></span><span className="shrink-0 text-[10px] text-muted-foreground">{announcement.displayDate}</span></button>)}{!isLoading && announcements.length === 0 && <div className="py-12 text-center text-sm text-muted-foreground">暂无最新公告</div>}</div></CardContent></Card>
+    </section>
+  )
+}
+
+function HomePage({ announcements, maps, backendError, isBackendLoading, onRetryBackend }: { announcements: LauncherAnnouncement[]; maps: LauncherMapResource[]; backendError: string | null; isBackendLoading: boolean; onRetryBackend: () => void }) {
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<"all" | "online">("all")
   const [sort, setSort] = useState<ServerSort>("players")
   const [servers, setServers] = useState<Server[]>([])
   const [selectedId, setSelectedId] = useState("")
   const [favorites, setFavorites] = useState<string[]>([])
-  const [showAnnouncement, setShowAnnouncement] = useState(true)
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<LauncherAnnouncement | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [joiningServerId, setJoiningServerId] = useState<string | null>(null)
   const [joinError, setJoinError] = useState<string | null>(null)
   const initialFetchStarted = useRef(false)
-
-  useEffect(() => {
-    setShowAnnouncement(true)
-  }, [announcement?.id])
 
   const loadServers = useCallback(async () => {
     setIsLoading(true)
@@ -280,7 +346,6 @@ function HomePage({ announcement, maps, backendError, isBackendLoading, onRetryB
     const serverMapNames = [selected.map, selected.mapName].map((value) => value.trim().toLowerCase())
     return serverMapNames.includes(map.name.trim().toLowerCase()) || serverMapNames.includes(map.shortName.trim().toLowerCase())
   }) : undefined
-  const onlinePlayers = servers.reduce((sum, server) => sum + server.players, 0)
   const joinableCount = servers.filter(isServerJoinable).length
 
   function toggleFavorite(id: string) {
@@ -302,38 +367,22 @@ function HomePage({ announcement, maps, backendError, isBackendLoading, onRetryB
 
   return (
     <main className="page-shell">
-      <PageHeading
-        eyebrow="实时服务器网络"
-        title="选择你的战场"
-        description={isLoading && servers.length === 0 ? "正在获取服务器列表并进行 A2S 延迟探测…" : `发现低延迟服务器，和 ${onlinePlayers} 名玩家一起进入游戏。`}
-        action={<Button variant="outline" disabled={isLoading} onClick={() => void loadServers()}><RefreshCw className={cn(isLoading && "animate-spin")} />刷新列表</Button>}
-      />
+      <AnnouncementCenter announcements={announcements} isLoading={isBackendLoading} onSelect={setSelectedAnnouncement} />
 
-      <div className="grid grid-cols-12 gap-5">
+      <div className="mt-5 grid grid-cols-12 gap-5">
         {backendError && (
           <div className="col-span-12 flex items-center justify-between gap-3 rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm">
             <span className="min-w-0 truncate text-red-600 dark:text-red-300">公告服务暂不可用：{backendError}</span>
             <Button variant="outline" size="sm" disabled={isBackendLoading} onClick={onRetryBackend}><RefreshCw className={cn(isBackendLoading && "animate-spin")} />重试</Button>
           </div>
         )}
-        {showAnnouncement && announcement && (
-          <div className="announcement-banner col-span-12" role="status">
-            <Badge className="shrink-0 bg-accent text-white">公告</Badge>
-            <div className="min-w-0 flex-1">
-              <span className="font-medium">{announcement.title}</span>
-              <span className="ml-2 text-muted-foreground">{announcement.content}</span>
-            </div>
-            <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">{announcement.displayDate}</span>
-            {announcement.dismissible && <Button variant="ghost" size="icon" className="size-8 shrink-0" onClick={() => setShowAnnouncement(false)} aria-label="关闭公告"><X /></Button>}
-          </div>
-        )}
-
         <div className="col-span-12 grid grid-cols-12 gap-5">
           <div className="relative col-span-12 lg:col-span-8">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索服务器、地图或模式..." className="pl-9" />
           </div>
-          <div className="col-span-12 flex justify-end lg:col-span-4">
+          <div className="col-span-12 flex justify-end gap-2 lg:col-span-4">
+            <Button variant="outline" size="sm" disabled={isLoading} onClick={() => void loadServers()}><RefreshCw className={cn(isLoading && "animate-spin")} />刷新</Button>
             <div className="flex rounded-lg border border-border bg-card p-1">
               <Button size="sm" variant={filter === "all" ? "secondary" : "ghost"} onClick={() => setFilter("all")}>全部 {servers.length}</Button>
               <Button size="sm" variant={filter === "online" ? "secondary" : "ghost"} onClick={() => setFilter("online")}>可加入 {joinableCount}</Button>
@@ -416,6 +465,7 @@ function HomePage({ announcement, maps, backendError, isBackendLoading, onRetryB
         )}
       </aside>
       </div>
+      <AnnouncementDetailDialog announcement={selectedAnnouncement} onOpenChange={(open) => { if (!open) setSelectedAnnouncement(null) }} />
     </main>
   )
 }
@@ -972,7 +1022,7 @@ function App() {
         </div>
       </header>
 
-      {activeTab === "home" && <HomePage announcement={bootstrap?.announcements[0] ?? null} maps={bootstrap?.maps ?? []} backendError={bootstrapError} isBackendLoading={isBootstrapLoading} onRetryBackend={() => void loadLauncherData()} />}
+      {activeTab === "home" && <HomePage announcements={bootstrap?.announcements ?? []} maps={bootstrap?.maps ?? []} backendError={bootstrapError} isBackendLoading={isBootstrapLoading} onRetryBackend={() => void loadLauncherData()} />}
       {activeTab === "store" && (effectiveBootstrap ? <StorePage data={effectiveBootstrap} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
       {activeTab === "inventory" && (bootstrap ? <InventoryPage items={isAuthenticated ? authenticatedInventory ?? [] : bootstrap.inventory} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
       {activeTab === "profile" && <ProfilePage account={effectiveAccount} purchaseHistory={purchaseHistory} seasonPass={seasonPass} penalties={penalties} steamAccount={steamAccount} isAuthenticated={isAuthenticated} theme={theme} onThemeChange={setTheme} onLogin={openLogin} onLogout={logout} />}

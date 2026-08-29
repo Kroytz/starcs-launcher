@@ -85,6 +85,32 @@ struct LauncherAnnouncement {
     dismissible: bool,
     display_date: String,
     published_at: String,
+    render_payload: Option<LauncherAnnouncementPayload>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LauncherAnnouncementPayload {
+    sections: Option<Vec<LauncherAnnouncementSection>>,
+    footer_message: Option<String>,
+    footer_team_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LauncherAnnouncementSection {
+    title: Option<String>,
+    section_type: Option<i32>,
+    blocks: Option<Vec<LauncherAnnouncementBlock>>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LauncherAnnouncementBlock {
+    kind: i32,
+    text: Option<String>,
+    image_id: Option<u64>,
+    image_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
