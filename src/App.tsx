@@ -907,7 +907,7 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
         setInventoryNotice(`「${item.name}」无法配置：${validationError}`)
         return
       }
-      const allowedModes = equipmentModes.filter(([mode]) => productModeIsAllowed(item.mode, mode)).map(([mode]) => mode)
+      const allowedModes = getSelectableEquipmentModes(item)
       if (allowedModes.length === 0) {
         setInventoryNotice(`「${item.name}」没有可用的服务器模式。`)
         return
@@ -929,7 +929,14 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
   }
 
   function toggleEquipmentMode(mode: string) {
+    if (equipment.unavailableModes?.[mode]) return
     setSelectedEquipmentModes((current) => current.includes(mode) ? current.filter((item) => item !== mode) : [...current, mode])
+  }
+
+  function getSelectableEquipmentModes(item: LauncherInventoryItem) {
+    return equipmentModes
+      .filter(([mode]) => productModeIsAllowed(item.mode, mode) && !equipment.unavailableModes?.[mode])
+      .map(([mode]) => mode)
   }
 
   async function confirmEquipment() {
@@ -974,6 +981,8 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
   const selectedConfigurationCount = selectedEquipmentModes.length * (equippingSlot === "player" && equipmentTeam === "all" ? 2 : 1)
   const currentEquipmentIDs = equippingItem ? getConfiguredProductIds(equipment, equippingItem, selectedEquipmentModes, equipmentTeam) : []
   const currentEquipmentNames = [...new Set(currentEquipmentIDs.map((productId) => inventory.find((item) => item.productId === productId)?.name).filter(Boolean))]
+  const selectableEquipmentModes = equippingItem ? getSelectableEquipmentModes(equippingItem) : []
+  const unavailableModeEntries = Object.entries(equipment.unavailableModes ?? {})
 
   return (
     <main className="page-shell inventory-page-shell">
@@ -996,17 +1005,19 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
       </section>}
       {isAuthenticated && inventoryNotice && <div className="mb-4 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm">{inventoryNotice}</div>}
       {isAuthenticated && (isEquipmentLoading || equipmentUnavailableReason) && <div className="mb-4 flex flex-col justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><div><div className="font-medium text-amber-700 dark:text-amber-200">{isEquipmentLoading ? "正在同步游戏内装备配置" : "装备功能暂不可用"}</div><div className="mt-1 text-xs text-muted-foreground">{isEquipmentLoading ? "库存和其他登录功能可以正常使用。" : equipmentUnavailableReason}</div></div>{equipmentUnavailableReason && <Button variant="outline" size="sm" onClick={onRetryEquipment}><RefreshCw />重新读取</Button>}</div>}
+      {isAuthenticated && !isEquipmentLoading && !equipmentUnavailableReason && unavailableModeEntries.length > 0 && <div className="mb-4 flex flex-col justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><div><div className="font-medium text-amber-700 dark:text-amber-200">部分模式的装备配置暂不可用</div><div className="mt-1 text-xs text-muted-foreground">{unavailableModeEntries.map(([mode, reason]) => `${modeLabels[mode] ?? mode}：${reason}`).join("；")}</div></div><Button variant="outline" size="sm" onClick={onRetryEquipment}><RefreshCw />重新读取</Button></div>}
       {isAuthenticated && <div className="inventory-grid">
         {inventory.map((item) => {
           const Icon = displayIcons[item.icon] ?? Package
           const itemName = item.quantity > 1 ? `${item.name} × ${item.quantity}` : item.name
           const slot = getCosmeticSlot(item)
+          const hasSelectableEquipmentMode = !slot || getSelectableEquipmentModes(item).length > 0
           const isEquipped = isStarLightItemEquipped(equipment, item)
           return (
             <Card key={item.id} className={cn("inventory-card overflow-hidden", item.quantity <= 0 && "opacity-60")} onContextMenu={(event) => openContextMenu(event, item)}>
               <div className={cn("relative grid aspect-[4/3] place-items-center bg-gradient-to-br", item.tone, rarityToneClass(item.rarity))}><div className="absolute right-2 top-2 flex items-center gap-1"><Badge variant="outline" className={cn("border-white/20 bg-black/35 text-white backdrop-blur-sm", rarityBadgeClass(item.rarity))}>{item.rarity}</Badge>{isEquipped && <Badge variant="success"><Check />已装备</Badge>}</div><Icon className="size-12 text-white/90" /></div>
               <CardHeader><Badge variant="secondary" className="w-fit">{item.type}</Badge><CardTitle className="pt-3 text-base">{itemName}</CardTitle></CardHeader>
-              <CardContent><Button variant="secondary" className="w-full" disabled={isAuthenticated && (item.quantity <= 0 || Boolean(slot && (isEquipmentLoading || equipmentUnavailableReason)))} onClick={() => handleInventoryAction(item)}>{!isAuthenticated ? "登录后操作" : slot && isEquipmentLoading ? "正在读取配置" : slot && equipmentUnavailableReason ? "装备暂不可用" : slot ? "配置装备" : "使用物品"}</Button></CardContent>
+              <CardContent><Button variant="secondary" className="w-full" disabled={isAuthenticated && (item.quantity <= 0 || Boolean(slot && (isEquipmentLoading || equipmentUnavailableReason || !hasSelectableEquipmentMode)))} onClick={() => handleInventoryAction(item)}>{!isAuthenticated ? "登录后操作" : slot && isEquipmentLoading ? "正在读取配置" : slot && (equipmentUnavailableReason || !hasSelectableEquipmentMode) ? "模式暂不可用" : slot ? "配置装备" : "使用物品"}</Button></CardContent>
             </Card>
           )
         })}
@@ -1014,7 +1025,7 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
 
       {contextMenu && menuItem && (
         <div role="menu" className="fixed z-[100] w-48 overflow-hidden rounded-lg border border-border bg-card p-1 text-foreground shadow-xl" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()} onContextMenu={(event) => event.preventDefault()}>
-          <button role="menuitem" type="button" className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50" disabled={menuItem.quantity <= 0 || Boolean(getCosmeticSlot(menuItem) && (isEquipmentLoading || equipmentUnavailableReason))} onClick={() => handleInventoryAction(menuItem)}>
+          <button role="menuitem" type="button" className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50" disabled={menuItem.quantity <= 0 || Boolean(getCosmeticSlot(menuItem) && (isEquipmentLoading || equipmentUnavailableReason || getSelectableEquipmentModes(menuItem).length === 0))} onClick={() => handleInventoryAction(menuItem)}>
             {getCosmeticSlot(menuItem) ? <Gamepad2 className="size-4 text-primary" /> : <Zap className="size-4 text-accent" />}
             <span><span className="block font-medium">{getCosmeticSlot(menuItem) ? "配置装备" : "使用"}</span><span className="block text-[10px] text-muted-foreground">{menuItem.name}</span></span>
           </button>
@@ -1035,7 +1046,7 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
             <>
               <DialogHeader><DialogTitle>配置「{equippingItem.name}」</DialogTitle><DialogDescription>{equippingSlot === "weapon" ? "勾选一个或多个模式；武器外观会按 StarLightStore 的武器类型与 prefab 配置，并对两个阵营生效。" : "勾选一个或多个模式，并为所有阵营或指定阵营装备角色外观。"}</DialogDescription></DialogHeader>
               <div className="space-y-5">
-                <div><div className="mb-2 flex items-center justify-between"><div className="text-sm font-medium">服务器模式</div><button type="button" className="text-xs text-primary hover:underline" onClick={() => { const allowedModes = equipmentModes.filter(([mode]) => productModeIsAllowed(equippingItem.mode, mode)).map(([mode]) => mode); setSelectedEquipmentModes(selectedEquipmentModes.length === allowedModes.length ? [] : allowedModes) }}>{selectedEquipmentModes.length === equipmentModes.filter(([mode]) => productModeIsAllowed(equippingItem.mode, mode)).length ? "清空" : "全选可用"}</button></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{equipmentModes.map(([mode, label]) => { const allowed = productModeIsAllowed(equippingItem.mode, mode); return <label key={mode} className={cn("flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors", allowed ? "cursor-pointer" : "cursor-not-allowed opacity-45", selectedEquipmentModes.includes(mode) ? "border-primary/40 bg-primary/10 text-foreground" : "border-border", allowed && "hover:bg-muted/40")}><input type="checkbox" className="size-4 accent-[var(--color-primary)]" disabled={!allowed} checked={selectedEquipmentModes.includes(mode)} onChange={() => toggleEquipmentMode(mode)} /><span>{label}</span></label> })}</div></div>
+                <div><div className="mb-2 flex items-center justify-between"><div className="text-sm font-medium">服务器模式</div><button type="button" className="text-xs text-primary hover:underline" onClick={() => setSelectedEquipmentModes(selectedEquipmentModes.length === selectableEquipmentModes.length ? [] : selectableEquipmentModes)}>{selectedEquipmentModes.length === selectableEquipmentModes.length ? "清空" : "全选可用"}</button></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{equipmentModes.map(([mode, label]) => { const unavailableReason = equipment.unavailableModes?.[mode]; const allowed = productModeIsAllowed(equippingItem.mode, mode) && !unavailableReason; return <label key={mode} title={unavailableReason || undefined} className={cn("flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors", allowed ? "cursor-pointer" : "cursor-not-allowed opacity-45", selectedEquipmentModes.includes(mode) ? "border-primary/40 bg-primary/10 text-foreground" : "border-border", allowed && "hover:bg-muted/40")}><input type="checkbox" className="size-4 accent-[var(--color-primary)]" disabled={!allowed} checked={selectedEquipmentModes.includes(mode)} onChange={() => toggleEquipmentMode(mode)} /><span>{label}{unavailableReason && <span className="ml-1 text-[10px] text-amber-600 dark:text-amber-300">不可用</span>}</span></label> })}</div></div>
                 {equippingSlot === "player" ? <div><div className="mb-2 text-sm font-medium">阵营</div><div className="grid grid-cols-1 gap-2 sm:grid-cols-3"><Button type="button" variant={equipmentTeam === "all" ? "secondary" : "outline"} onClick={() => setEquipmentTeam("all")}>所有阵营</Button><Button type="button" variant={equipmentTeam === "ct" ? "secondary" : "outline"} onClick={() => setEquipmentTeam("ct")}>CT 反恐精英</Button><Button type="button" variant={equipmentTeam === "t" ? "secondary" : "outline"} onClick={() => setEquipmentTeam("t")}>T 恐怖分子</Button></div></div> : <div className="rounded-lg border border-secondary/20 bg-secondary/10 px-4 py-3 text-sm"><div className="font-medium">全阵营武器配置</div><div className="mt-1 text-xs text-muted-foreground">{equippingItem.weaponPrefab} · {equippingItem.weaponType}</div></div>}
                 <div className="rounded-lg border border-border bg-muted/25 px-4 py-3 text-sm"><div className="text-xs text-muted-foreground">将覆盖 {selectedConfigurationCount} 个配置</div><div className="mt-1 font-medium">{currentEquipmentNames.length > 0 ? `当前包含：${currentEquipmentNames.join("、")}` : "当前均未装备"}</div></div>
                 {equipmentError && <div role="alert" className="rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-300"><div className="font-medium">操作失败</div><div className="mt-1 text-xs leading-5">{equipmentError}</div></div>}
@@ -1324,7 +1335,7 @@ function App() {
 
       {activeTab === "home" && <HomePage announcements={bootstrap?.announcements ?? []} maps={bootstrap?.maps ?? []} backendError={bootstrapError} isBackendLoading={isBootstrapLoading} onRetryBackend={() => void loadLauncherData()} />}
       {activeTab === "store" && (effectiveBootstrap ? <StorePage data={effectiveBootstrap} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
-      {activeTab === "inventory" && (bootstrap ? <InventoryPage key={isAuthenticated ? effectiveAccount?.profile.userId ?? "authenticated" : "guest"} items={isAuthenticated ? authenticatedInventory ?? [] : []} purchaseHistory={purchaseHistory} equipment={authenticatedEquipment ?? { version: 2, plugin: "star_light_store", modes: {} }} isAuthenticated={isAuthenticated} isEquipmentLoading={isEquipmentLoading} equipmentUnavailableReason={equipmentUnavailableReason} onRequireLogin={openLogin} onRetryEquipment={() => { if (authToken) void loadAuthenticatedEquipment(authToken, password) }} onEquipmentOperation={applyEquipmentOperation} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
+      {activeTab === "inventory" && (bootstrap ? <InventoryPage key={isAuthenticated ? effectiveAccount?.profile.userId ?? "authenticated" : "guest"} items={isAuthenticated ? authenticatedInventory ?? [] : []} purchaseHistory={purchaseHistory} equipment={authenticatedEquipment ?? { version: 2, plugin: "star_light_store", modes: {}, unavailableModes: {} }} isAuthenticated={isAuthenticated} isEquipmentLoading={isEquipmentLoading} equipmentUnavailableReason={equipmentUnavailableReason} onRequireLogin={openLogin} onRetryEquipment={() => { if (authToken) void loadAuthenticatedEquipment(authToken, password) }} onEquipmentOperation={applyEquipmentOperation} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
       {activeTab === "profile" && <ProfilePage account={effectiveAccount} purchaseHistory={purchaseHistory} seasonPass={seasonPass} penalties={penalties} steamAccount={steamAccount} isAuthenticated={isAuthenticated} theme={theme} onThemeChange={setTheme} onLogin={openLogin} onLogout={logout} />}
     </div>
   )

@@ -103,6 +103,7 @@ export type StarLightEquipmentProfile = {
   version: 2
   plugin: "star_light_store"
   modes: Record<string, StarLightModeEquipment>
+  unavailableModes: Record<string, string>
 }
 
 export type LauncherEquipmentCommandResult = {
