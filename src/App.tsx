@@ -754,8 +754,9 @@ function getSavedEquipment(): EquipmentAssignments {
   }
 }
 
-function InventoryPage({ items, isAuthenticated, onRequireLogin }: { items: LauncherInventoryItem[]; isAuthenticated: boolean; onRequireLogin: () => void }) {
+function InventoryPage({ items, purchaseHistory, isAuthenticated, onRequireLogin }: { items: LauncherInventoryItem[]; purchaseHistory: LauncherPurchaseHistoryItem[]; isAuthenticated: boolean; onRequireLogin: () => void }) {
   const [inventory, setInventory] = useState(items)
+  const [purchaseHistoryOpen, setPurchaseHistoryOpen] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ itemId: string; x: number; y: number } | null>(null)
   const [equippingItem, setEquippingItem] = useState<LauncherInventoryItem | null>(null)
   const [selectedEquipmentModes, setSelectedEquipmentModes] = useState<string[]>([equipmentModes[0]?.[0] ?? "ZM"])
@@ -871,7 +872,7 @@ function InventoryPage({ items, isAuthenticated, onRequireLogin }: { items: Laun
 
   return (
     <main className="page-shell inventory-page-shell">
-      <PageHeading eyebrow="我的库存" title="已拥有的物品" description="展示当前账号可用的全部物品；外观配置仅保存在本机，使用与同步暂未开放。" action={isAuthenticated ? <Button variant="outline"><Boxes />全部物品 {inventory.length}</Button> : undefined} />
+      <PageHeading eyebrow="我的库存" title="已拥有的物品" description="展示当前账号可用的全部物品；外观配置仅保存在本机，使用与同步暂未开放。" action={isAuthenticated ? <div className="flex flex-col gap-2 sm:items-end"><Button variant="outline" onClick={() => setPurchaseHistoryOpen(true)}><ShoppingBag />最近购买 {purchaseHistory.length}</Button><Button variant="outline"><Boxes />全部物品 {inventory.length}</Button></div> : undefined} />
       {!isAuthenticated && <Card><CardContent className="flex flex-col items-center py-20 text-center"><div className="mb-4 grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary"><Backpack className="size-7" /></div><CardTitle>登录后查看真实库存</CardTitle><CardDescription className="mt-2 max-w-md leading-6">登录可以管理已拥有的道具，并为不同模式和阵营配置武器与角色外观。</CardDescription><Button className="mt-6" onClick={onRequireLogin}><LogIn />登录并读取库存</Button></CardContent></Card>}
       {isAuthenticated && inventoryNotice && <div className="mb-4 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm">{inventoryNotice}</div>}
       {isAuthenticated && <div className="inventory-grid">
@@ -898,6 +899,14 @@ function InventoryPage({ items, isAuthenticated, onRequireLogin }: { items: Laun
           </button>
         </div>
       )}
+
+      <Dialog open={purchaseHistoryOpen} onOpenChange={setPurchaseHistoryOpen}>
+        <DialogContent className="sm:max-w-[720px]">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><ShoppingBag className="size-5 text-primary" />最近购买记录</DialogTitle><DialogDescription>展示当前账号从数据库读取到的购买记录。</DialogDescription></DialogHeader>
+          {purchaseHistory.length === 0 ? <div className="rounded-xl border border-dashed border-border py-12 text-center text-sm text-muted-foreground">暂无购买记录</div> : <div className="max-h-[60vh] divide-y divide-border overflow-y-auto rounded-xl border border-border">{purchaseHistory.map((item) => <div key={item.id} className="flex items-center justify-between gap-4 px-4 py-3"><div className="min-w-0"><div className="truncate text-sm font-medium">{item.productName}</div><div className="mt-1 text-xs text-muted-foreground">{item.description || `${item.quantity} 件${item.days > 0 ? ` · ${item.days} 天` : ""}`} · {formatLauncherDate(item.createdAt)}</div></div><div className="shrink-0 text-right"><div className="text-sm font-semibold">{item.totalPrice.toLocaleString()}</div><div className="text-[10px] text-muted-foreground">{item.currencyType || "货币"}</div></div></div>)}</div>}
+          <DialogFooter><DialogClose asChild><Button variant="outline">关闭</Button></DialogClose></DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={equippingItem !== null} onOpenChange={(open) => { if (!open) setEquippingItem(null) }}>
         <DialogContent>
@@ -956,7 +965,6 @@ function ProfilePage({ account, purchaseHistory, seasonPass, penalties, steamAcc
 
           {isAuthenticated && seasonPass?.available && <Card><CardHeader><div className="flex items-center gap-3"><div className="setting-icon"><Trophy /></div><div><CardTitle>赛季通行证 · 第 {seasonPass.seasonId} 赛季</CardTitle><CardDescription>真实赛季进度，最近更新于 {formatLauncherDate(seasonPass.updatedAt)}。</CardDescription></div></div></CardHeader><CardContent><div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">Lv. {seasonPass.level}</div><div className="text-xs text-muted-foreground">通行证等级</div></div><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">{seasonPass.experience}</div><div className="text-xs text-muted-foreground">经验</div></div><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">{seasonPass.claimedRewardCount}</div><div className="text-xs text-muted-foreground">已领礼包</div></div><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">{seasonPass.starSourceChestOpened}</div><div className="text-xs text-muted-foreground">已开宝箱</div></div></div><div className="mt-3 grid grid-cols-2 gap-3 text-sm"><div className="rounded-lg border border-border px-3 py-2"><span className="text-muted-foreground">今日游戏</span><span className="float-right font-medium">{seasonPass.dailyGames} 局 / {seasonPass.dailyOnlineMinutes} 分钟</span></div><div className="rounded-lg border border-border px-3 py-2"><span className="text-muted-foreground">本周进度</span><span className="float-right font-medium">{seasonPass.weeklyGames} 局 / {seasonPass.weeklyCompletedModes} 模式</span></div></div></CardContent></Card>}
 
-          {isAuthenticated && <Card><CardHeader><div className="flex items-center gap-3"><div className="setting-icon"><ShoppingBag /></div><div><CardTitle>最近购买记录</CardTitle><CardDescription>从数据库读取最近 {Math.min(purchaseHistory.length, 8)} 条记录。</CardDescription></div></div></CardHeader><CardContent>{purchaseHistory.length === 0 ? <div className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">暂无购买记录</div> : <div className="divide-y divide-border rounded-lg border border-border">{purchaseHistory.slice(0, 8).map((item) => <div key={item.id} className="flex items-center justify-between gap-4 px-4 py-3"><div className="min-w-0"><div className="truncate text-sm font-medium">{item.productName}</div><div className="mt-1 text-xs text-muted-foreground">{item.description || `${item.quantity} 件${item.days > 0 ? ` · ${item.days} 天` : ""}`} · {formatLauncherDate(item.createdAt)}</div></div><div className="shrink-0 text-right"><div className="text-sm font-semibold">{item.totalPrice.toLocaleString()}</div><div className="text-[10px] text-muted-foreground">{item.currencyType || "货币"}</div></div></div>)}</div>}</CardContent></Card>}
         </div>
       </div>
     </main>
@@ -1122,7 +1130,7 @@ function App() {
 
       {activeTab === "home" && <HomePage announcements={bootstrap?.announcements ?? []} maps={bootstrap?.maps ?? []} backendError={bootstrapError} isBackendLoading={isBootstrapLoading} onRetryBackend={() => void loadLauncherData()} />}
       {activeTab === "store" && (effectiveBootstrap ? <StorePage data={effectiveBootstrap} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
-      {activeTab === "inventory" && (bootstrap ? <InventoryPage items={isAuthenticated ? authenticatedInventory ?? [] : []} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
+      {activeTab === "inventory" && (bootstrap ? <InventoryPage items={isAuthenticated ? authenticatedInventory ?? [] : []} purchaseHistory={purchaseHistory} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
       {activeTab === "profile" && <ProfilePage account={effectiveAccount} purchaseHistory={purchaseHistory} seasonPass={seasonPass} penalties={penalties} steamAccount={steamAccount} isAuthenticated={isAuthenticated} theme={theme} onThemeChange={setTheme} onLogin={openLogin} onLogout={logout} />}
     </div>
   )
