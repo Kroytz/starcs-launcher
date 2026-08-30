@@ -844,7 +844,7 @@ function BackendDataPage({ isLoading, error, onRetry }: { isLoading: boolean; er
 
 const equipmentModes = Object.entries(modeLabels)
 
-function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, onRequireLogin, onEquipmentOperation }: { items: LauncherInventoryItem[]; purchaseHistory: LauncherPurchaseHistoryItem[]; equipment: StarLightEquipmentProfile; isAuthenticated: boolean; onRequireLogin: () => void; onEquipmentOperation: (equip: boolean, productId: number, modes: string[], team: EquipmentTargetTeam) => Promise<boolean> }) {
+function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isEquipmentLoading, equipmentUnavailableReason, onRequireLogin, onRetryEquipment, onEquipmentOperation }: { items: LauncherInventoryItem[]; purchaseHistory: LauncherPurchaseHistoryItem[]; equipment: StarLightEquipmentProfile; isAuthenticated: boolean; isEquipmentLoading: boolean; equipmentUnavailableReason: string | null; onRequireLogin: () => void; onRetryEquipment: () => void; onEquipmentOperation: (equip: boolean, productId: number, modes: string[], team: EquipmentTargetTeam) => Promise<boolean> }) {
   const [inventory, setInventory] = useState(items)
   const [purchaseHistoryOpen, setPurchaseHistoryOpen] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ itemId: string; x: number; y: number } | null>(null)
@@ -898,6 +898,10 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, onR
     const slot = getCosmeticSlot(item)
     setContextMenu(null)
     if (slot) {
+      if (isEquipmentLoading || equipmentUnavailableReason) {
+        setInventoryNotice(isEquipmentLoading ? "游戏内装备配置仍在加载，稍后即可使用装备功能。" : `装备功能暂不可用：${equipmentUnavailableReason}`)
+        return
+      }
       const validationError = getEquipmentValidationError(item)
       if (validationError) {
         setInventoryNotice(`「${item.name}」无法配置：${validationError}`)
@@ -991,6 +995,7 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, onR
         </div>
       </section>}
       {isAuthenticated && inventoryNotice && <div className="mb-4 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm">{inventoryNotice}</div>}
+      {isAuthenticated && (isEquipmentLoading || equipmentUnavailableReason) && <div className="mb-4 flex flex-col justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><div><div className="font-medium text-amber-700 dark:text-amber-200">{isEquipmentLoading ? "正在同步游戏内装备配置" : "装备功能暂不可用"}</div><div className="mt-1 text-xs text-muted-foreground">{isEquipmentLoading ? "库存和其他登录功能可以正常使用。" : equipmentUnavailableReason}</div></div>{equipmentUnavailableReason && <Button variant="outline" size="sm" onClick={onRetryEquipment}><RefreshCw />重新读取</Button>}</div>}
       {isAuthenticated && <div className="inventory-grid">
         {inventory.map((item) => {
           const Icon = displayIcons[item.icon] ?? Package
@@ -1001,7 +1006,7 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, onR
             <Card key={item.id} className={cn("inventory-card overflow-hidden", item.quantity <= 0 && "opacity-60")} onContextMenu={(event) => openContextMenu(event, item)}>
               <div className={cn("relative grid aspect-[4/3] place-items-center bg-gradient-to-br", item.tone, rarityToneClass(item.rarity))}><div className="absolute right-2 top-2 flex items-center gap-1"><Badge variant="outline" className={cn("border-white/20 bg-black/35 text-white backdrop-blur-sm", rarityBadgeClass(item.rarity))}>{item.rarity}</Badge>{isEquipped && <Badge variant="success"><Check />已装备</Badge>}</div><Icon className="size-12 text-white/90" /></div>
               <CardHeader><Badge variant="secondary" className="w-fit">{item.type}</Badge><CardTitle className="pt-3 text-base">{itemName}</CardTitle></CardHeader>
-              <CardContent><Button variant="secondary" className="w-full" disabled={isAuthenticated && item.quantity <= 0} onClick={() => handleInventoryAction(item)}>{!isAuthenticated ? "登录后操作" : slot ? "配置装备" : "使用物品"}</Button></CardContent>
+              <CardContent><Button variant="secondary" className="w-full" disabled={isAuthenticated && (item.quantity <= 0 || Boolean(slot && (isEquipmentLoading || equipmentUnavailableReason)))} onClick={() => handleInventoryAction(item)}>{!isAuthenticated ? "登录后操作" : slot && isEquipmentLoading ? "正在读取配置" : slot && equipmentUnavailableReason ? "装备暂不可用" : slot ? "配置装备" : "使用物品"}</Button></CardContent>
             </Card>
           )
         })}
@@ -1009,7 +1014,7 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, onR
 
       {contextMenu && menuItem && (
         <div role="menu" className="fixed z-[100] w-48 overflow-hidden rounded-lg border border-border bg-card p-1 text-foreground shadow-xl" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()} onContextMenu={(event) => event.preventDefault()}>
-          <button role="menuitem" type="button" className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50" disabled={menuItem.quantity <= 0} onClick={() => handleInventoryAction(menuItem)}>
+          <button role="menuitem" type="button" className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50" disabled={menuItem.quantity <= 0 || Boolean(getCosmeticSlot(menuItem) && (isEquipmentLoading || equipmentUnavailableReason))} onClick={() => handleInventoryAction(menuItem)}>
             {getCosmeticSlot(menuItem) ? <Gamepad2 className="size-4 text-primary" /> : <Zap className="size-4 text-accent" />}
             <span><span className="block font-medium">{getCosmeticSlot(menuItem) ? "配置装备" : "使用"}</span><span className="block text-[10px] text-muted-foreground">{menuItem.name}</span></span>
           </button>
@@ -1102,6 +1107,8 @@ function App() {
   const [authenticatedAccount, setAuthenticatedAccount] = useState<LauncherAccount | null>(null)
   const [authenticatedInventory, setAuthenticatedInventory] = useState<LauncherInventoryItem[] | null>(null)
   const [authenticatedEquipment, setAuthenticatedEquipment] = useState<StarLightEquipmentProfile | null>(null)
+  const [isEquipmentLoading, setIsEquipmentLoading] = useState(false)
+  const [equipmentUnavailableReason, setEquipmentUnavailableReason] = useState<string | null>(null)
   const [purchaseHistory, setPurchaseHistory] = useState<LauncherPurchaseHistoryItem[]>([])
   const [seasonPass, setSeasonPass] = useState<LauncherSeasonPass | null>(null)
   const [penalties, setPenalties] = useState<LauncherPenalty[]>([])
@@ -1111,6 +1118,7 @@ function App() {
   const [isBootstrapLoading, setIsBootstrapLoading] = useState(true)
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
   const bootstrapFetchStarted = useRef(false)
+  const activeAuthToken = useRef<string | null>(null)
   const isAuthenticated = authToken !== null
   const effectiveAccount = isAuthenticated ? authenticatedAccount : bootstrap?.account ?? null
   const effectiveBootstrap = bootstrap && effectiveAccount ? { ...bootstrap, account: effectiveAccount } : bootstrap
@@ -1195,19 +1203,18 @@ function App() {
     setIsLoginSubmitting(true)
     try {
       const session = await loginLauncherAccount(steamAccount.steamId, password)
-      const equipmentResult = await fetchLauncherEquipment(session.token, password)
-      if (!equipmentResult.authenticated || !equipmentResult.equipment) {
-        throw new Error("游戏内密码已失效，请使用当前密码重新登录。")
-      }
       await updateRememberedPassword(steamAccount.steamId, rememberPassword ? password : null)
+      activeAuthToken.current = session.token
       setAuthenticatedAccount(session.account)
       setAuthenticatedInventory(session.inventory)
-      setAuthenticatedEquipment(equipmentResult.equipment)
+      setAuthenticatedEquipment(null)
+      setEquipmentUnavailableReason(null)
       setPurchaseHistory(session.purchaseHistory)
       setSeasonPass(session.seasonPass)
       setPenalties(session.penalties)
       setAuthToken(session.token)
       setLoginOpen(false)
+      void loadAuthenticatedEquipment(session.token, password)
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : String(error))
     } finally {
@@ -1216,10 +1223,13 @@ function App() {
   }
 
   function logout() {
+    activeAuthToken.current = null
     setAuthToken(null)
     setAuthenticatedAccount(null)
     setAuthenticatedInventory(null)
     setAuthenticatedEquipment(null)
+    setIsEquipmentLoading(false)
+    setEquipmentUnavailableReason(null)
     setPurchaseHistory([])
     setSeasonPass(null)
     setPenalties([])
@@ -1240,10 +1250,38 @@ function App() {
     setLoginOpen(true)
   }
 
+  async function loadAuthenticatedEquipment(token: string, currentPassword: string) {
+    if (activeAuthToken.current !== token) return
+    setIsEquipmentLoading(true)
+    setEquipmentUnavailableReason(null)
+    try {
+      const result = await fetchLauncherEquipment(token, currentPassword)
+      if (activeAuthToken.current !== token) return
+      if (!result.authenticated) {
+        await invalidateAuthentication()
+        return
+      }
+      if (!result.equipment) {
+        throw new Error("后端未返回游戏内装备配置。")
+      }
+      setAuthenticatedEquipment(result.equipment)
+    } catch (error) {
+      if (activeAuthToken.current === token) {
+        setAuthenticatedEquipment(null)
+        setEquipmentUnavailableReason(error instanceof Error ? error.message : String(error))
+      }
+    } finally {
+      if (activeAuthToken.current === token) setIsEquipmentLoading(false)
+    }
+  }
+
   async function applyEquipmentOperation(equip: boolean, productId: number, modes: string[], team: EquipmentTargetTeam) {
     if (!authToken) {
       openLogin()
       return false
+    }
+    if (!authenticatedEquipment) {
+      throw new Error(equipmentUnavailableReason ?? "游戏内装备配置尚未加载完成。")
     }
     const result = await updateLauncherEquipment(authToken, password, productId, modes, team, equip)
     if (!result.authenticated) {
@@ -1286,7 +1324,7 @@ function App() {
 
       {activeTab === "home" && <HomePage announcements={bootstrap?.announcements ?? []} maps={bootstrap?.maps ?? []} backendError={bootstrapError} isBackendLoading={isBootstrapLoading} onRetryBackend={() => void loadLauncherData()} />}
       {activeTab === "store" && (effectiveBootstrap ? <StorePage data={effectiveBootstrap} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
-      {activeTab === "inventory" && (bootstrap ? (isAuthenticated && !authenticatedEquipment ? <BackendDataPage isLoading error={null} onRetry={() => undefined} /> : <InventoryPage key={isAuthenticated ? effectiveAccount?.profile.userId ?? "authenticated" : "guest"} items={isAuthenticated ? authenticatedInventory ?? [] : []} purchaseHistory={purchaseHistory} equipment={authenticatedEquipment ?? { version: 2, plugin: "star_light_store", modes: {} }} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} onEquipmentOperation={applyEquipmentOperation} />) : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
+      {activeTab === "inventory" && (bootstrap ? <InventoryPage key={isAuthenticated ? effectiveAccount?.profile.userId ?? "authenticated" : "guest"} items={isAuthenticated ? authenticatedInventory ?? [] : []} purchaseHistory={purchaseHistory} equipment={authenticatedEquipment ?? { version: 2, plugin: "star_light_store", modes: {} }} isAuthenticated={isAuthenticated} isEquipmentLoading={isEquipmentLoading} equipmentUnavailableReason={equipmentUnavailableReason} onRequireLogin={openLogin} onRetryEquipment={() => { if (authToken) void loadAuthenticatedEquipment(authToken, password) }} onEquipmentOperation={applyEquipmentOperation} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
       {activeTab === "profile" && <ProfilePage account={effectiveAccount} purchaseHistory={purchaseHistory} seasonPass={seasonPass} penalties={penalties} steamAccount={steamAccount} isAuthenticated={isAuthenticated} theme={theme} onThemeChange={setTheme} onLogin={openLogin} onLogout={logout} />}
     </div>
   )
