@@ -90,6 +90,7 @@ import {
 import {
   fetchLauncherBootstrap,
   loginLauncherAccount,
+  verifyLauncherPassword,
   type LauncherAccount,
   type LauncherAnnouncement,
   type LauncherBootstrap,
@@ -781,7 +782,7 @@ function BackendDataPage({ isLoading, error, onRetry }: { isLoading: boolean; er
 
 const equipmentModes = Object.entries(modeLabels)
 
-function InventoryPage({ items, purchaseHistory, steamId, isAuthenticated, onRequireLogin }: { items: LauncherInventoryItem[]; purchaseHistory: LauncherPurchaseHistoryItem[]; steamId: string; isAuthenticated: boolean; onRequireLogin: () => void }) {
+function InventoryPage({ items, purchaseHistory, steamId, isAuthenticated, onRequireLogin, onVerifyOperation }: { items: LauncherInventoryItem[]; purchaseHistory: LauncherPurchaseHistoryItem[]; steamId: string; isAuthenticated: boolean; onRequireLogin: () => void; onVerifyOperation: () => Promise<boolean> }) {
   const [inventory, setInventory] = useState(items)
   const [purchaseHistoryOpen, setPurchaseHistoryOpen] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ itemId: string; x: number; y: number } | null>(null)
@@ -790,6 +791,7 @@ function InventoryPage({ items, purchaseHistory, steamId, isAuthenticated, onReq
   const [equipmentTeam, setEquipmentTeam] = useState<EquipmentTargetTeam>("all")
   const [equipment, setEquipment] = useState(() => loadStarLightEquipment(steamId, items))
   const [inventoryNotice, setInventoryNotice] = useState<string | null>(null)
+  const [isEquipmentSubmitting, setIsEquipmentSubmitting] = useState(false)
 
   useEffect(() => {
     setInventory(items)
@@ -867,23 +869,39 @@ function InventoryPage({ items, purchaseHistory, steamId, isAuthenticated, onReq
     setSelectedEquipmentModes((current) => current.includes(mode) ? current.filter((item) => item !== mode) : [...current, mode])
   }
 
-  function confirmEquipment() {
+  async function confirmEquipment() {
     if (!equippingItem) return
     const slot = getCosmeticSlot(equippingItem)
     if (!slot || selectedEquipmentModes.length === 0) return
-    setEquipment((current) => equipStarLightItem(current, equippingItem, selectedEquipmentModes, equipmentTeam))
-    const teamLabel = slot === "weapon" ? "全阵营" : equipmentTeam === "all" ? "所有阵营" : equipmentTeam.toUpperCase()
-    setInventoryNotice(`已将「${equippingItem.name}」保存到本机配置：${selectedEquipmentModes.length} 个模式 · ${teamLabel}（尚未同步服务器）。`)
-    setEquippingItem(null)
+    setIsEquipmentSubmitting(true)
+    try {
+      if (!await onVerifyOperation()) return
+      setEquipment((current) => equipStarLightItem(current, equippingItem, selectedEquipmentModes, equipmentTeam))
+      const teamLabel = slot === "weapon" ? "全阵营" : equipmentTeam === "all" ? "所有阵营" : equipmentTeam.toUpperCase()
+      setInventoryNotice(`已将「${equippingItem.name}」保存到本机配置：${selectedEquipmentModes.length} 个模式 · ${teamLabel}（尚未同步服务器）。`)
+      setEquippingItem(null)
+    } catch (error) {
+      setInventoryNotice(error instanceof Error ? error.message : String(error))
+    } finally {
+      setIsEquipmentSubmitting(false)
+    }
   }
 
-  function clearEquipment() {
+  async function clearEquipment() {
     if (!equippingItem) return
     const slot = getCosmeticSlot(equippingItem)
     if (!slot || selectedEquipmentModes.length === 0) return
-    setEquipment((current) => unequipStarLightItem(current, equippingItem, selectedEquipmentModes, equipmentTeam))
-    setInventoryNotice(`已从本机卸下「${equippingItem.name}」的所选配置（尚未同步服务器）。`)
-    setEquippingItem(null)
+    setIsEquipmentSubmitting(true)
+    try {
+      if (!await onVerifyOperation()) return
+      setEquipment((current) => unequipStarLightItem(current, equippingItem, selectedEquipmentModes, equipmentTeam))
+      setInventoryNotice(`已从本机卸下「${equippingItem.name}」的所选配置（尚未同步服务器）。`)
+      setEquippingItem(null)
+    } catch (error) {
+      setInventoryNotice(error instanceof Error ? error.message : String(error))
+    } finally {
+      setIsEquipmentSubmitting(false)
+    }
   }
 
   const menuItem = contextMenu ? inventory.find((item) => item.id === contextMenu.itemId) ?? null : null
@@ -955,7 +973,7 @@ function InventoryPage({ items, purchaseHistory, steamId, isAuthenticated, onReq
                 {equippingSlot === "player" ? <div><div className="mb-2 text-sm font-medium">阵营</div><div className="grid grid-cols-1 gap-2 sm:grid-cols-3"><Button type="button" variant={equipmentTeam === "all" ? "secondary" : "outline"} onClick={() => setEquipmentTeam("all")}>所有阵营</Button><Button type="button" variant={equipmentTeam === "ct" ? "secondary" : "outline"} onClick={() => setEquipmentTeam("ct")}>CT 反恐精英</Button><Button type="button" variant={equipmentTeam === "t" ? "secondary" : "outline"} onClick={() => setEquipmentTeam("t")}>T 恐怖分子</Button></div></div> : <div className="rounded-lg border border-secondary/20 bg-secondary/10 px-4 py-3 text-sm"><div className="font-medium">全阵营武器配置</div><div className="mt-1 text-xs text-muted-foreground">{equippingItem.weaponPrefab} · {equippingItem.weaponType}</div></div>}
                 <div className="rounded-lg border border-border bg-muted/25 px-4 py-3 text-sm"><div className="text-xs text-muted-foreground">将覆盖 {selectedConfigurationCount} 个配置</div><div className="mt-1 font-medium">{currentEquipmentNames.length > 0 ? `当前包含：${currentEquipmentNames.join("、")}` : "当前均未装备"}</div></div>
               </div>
-              <DialogFooter><Button variant="ghost" disabled={!currentEquipmentIDs.includes(equippingItem.productId ?? 0)} onClick={clearEquipment}>卸下此物品</Button><DialogClose asChild><Button variant="outline">取消</Button></DialogClose><Button disabled={selectedEquipmentModes.length === 0} onClick={confirmEquipment}><Check />确认装备</Button></DialogFooter>
+              <DialogFooter><Button variant="ghost" disabled={isEquipmentSubmitting || !currentEquipmentIDs.includes(equippingItem.productId ?? 0)} onClick={() => void clearEquipment()}>卸下此物品</Button><DialogClose asChild><Button variant="outline" disabled={isEquipmentSubmitting}>取消</Button></DialogClose><Button disabled={isEquipmentSubmitting || selectedEquipmentModes.length === 0} onClick={() => void confirmEquipment()}>{isEquipmentSubmitting ? <RefreshCw className="animate-spin" /> : <Check />}{isEquipmentSubmitting ? "正在校验…" : "确认装备"}</Button></DialogFooter>
             </>
           )}
         </DialogContent>
@@ -1138,6 +1156,34 @@ function App() {
     setPenalties([])
   }
 
+  async function invalidateAuthentication() {
+    if (steamAccount?.steamId) {
+      try {
+        await updateRememberedPassword(steamAccount.steamId, null)
+      } catch {
+        // 会话仍应失效；本地密文清理失败会在下次登录时被新密码覆盖。
+      }
+    }
+    logout()
+    setPassword("")
+    setRememberPassword(false)
+    setLoginError("游戏内密码已变更或校验失败，请使用当前密码重新登录。")
+    setLoginOpen(true)
+  }
+
+  async function verifySensitiveOperation() {
+    if (!authToken) {
+      openLogin()
+      return false
+    }
+    const valid = await verifyLauncherPassword(authToken, password)
+    if (!valid) {
+      await invalidateAuthentication()
+      return false
+    }
+    return true
+  }
+
   return (
     <div className="min-h-screen text-foreground">
       <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} account={steamAccount} isLoading={isSteamAccountLoading} isSubmitting={isLoginSubmitting} accountError={steamAccountError} password={password} rememberPassword={rememberPassword} loginError={loginError} onPasswordChange={setPassword} onRememberPasswordChange={setRememberPassword} onRetry={() => void loadSteamSession()} onLogin={() => void login()} />
@@ -1167,7 +1213,7 @@ function App() {
 
       {activeTab === "home" && <HomePage announcements={bootstrap?.announcements ?? []} maps={bootstrap?.maps ?? []} backendError={bootstrapError} isBackendLoading={isBootstrapLoading} onRetryBackend={() => void loadLauncherData()} />}
       {activeTab === "store" && (effectiveBootstrap ? <StorePage data={effectiveBootstrap} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
-      {activeTab === "inventory" && (bootstrap ? <InventoryPage key={isAuthenticated ? effectiveAccount?.profile.userId ?? "authenticated" : "guest"} items={isAuthenticated ? authenticatedInventory ?? [] : []} purchaseHistory={purchaseHistory} steamId={isAuthenticated ? effectiveAccount?.profile.userId ?? "" : ""} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
+      {activeTab === "inventory" && (bootstrap ? <InventoryPage key={isAuthenticated ? effectiveAccount?.profile.userId ?? "authenticated" : "guest"} items={isAuthenticated ? authenticatedInventory ?? [] : []} purchaseHistory={purchaseHistory} steamId={isAuthenticated ? effectiveAccount?.profile.userId ?? "" : ""} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} onVerifyOperation={verifySensitiveOperation} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
       {activeTab === "profile" && <ProfilePage account={effectiveAccount} purchaseHistory={purchaseHistory} seasonPass={seasonPass} penalties={penalties} steamAccount={steamAccount} isAuthenticated={isAuthenticated} theme={theme} onThemeChange={setTheme} onLogin={openLogin} onLogout={logout} />}
     </div>
   )

@@ -177,3 +177,7 @@ export async function fetchLauncherBootstrap() {
 export async function loginLauncherAccount(steamId: string, password: string) {
   return invoke<LauncherLoginSession>("login_launcher_account", { steamId, password })
 }
+
+export async function verifyLauncherPassword(token: string, password: string) {
+  return invoke<boolean>("verify_launcher_password", { token, password })
+}

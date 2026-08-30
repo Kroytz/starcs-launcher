@@ -275,6 +275,16 @@ struct LauncherLoginRequest {
     password: String,
 }
 
+#[derive(Serialize)]
+struct LauncherPasswordVerificationRequest {
+    password: String,
+}
+
+#[derive(Deserialize, Serialize)]
+struct LauncherPasswordVerification {
+    valid: bool,
+}
+
 fn query_a2s_latency(ip: &str, port: u16) -> Option<u64> {
     let server_addr = format!("{ip}:{port}").to_socket_addrs().ok()?.next()?;
     let bind_addr = if server_addr.is_ipv4() {
@@ -401,6 +411,35 @@ async fn login_launcher_account(
     payload.data.ok_or_else(|| "登录响应缺少会话数据".to_string())
 }
 
+#[tauri::command]
+async fn verify_launcher_password(token: String, password: String) -> Result<bool, String> {
+    let backend_url = std::env::var("STAR_LAUNCHER_BACKEND_URL")
+        .unwrap_or_else(|_| DEFAULT_LAUNCHER_BACKEND_URL.to_string());
+    let request_url = format!("{}/api/v1/auth/verify", backend_url.trim_end_matches('/'));
+    let response = reqwest::Client::builder()
+        .timeout(Duration::from_secs(12))
+        .build()
+        .map_err(|error| format!("创建密码复验客户端失败：{error}"))?
+        .post(&request_url)
+        .bearer_auth(token)
+        .json(&LauncherPasswordVerificationRequest { password })
+        .send()
+        .await
+        .map_err(|error| format!("连接登录器后端失败（{request_url}）：{error}"))?;
+    let status = response.status();
+    let payload = response
+        .json::<OptionalApiEnvelope<LauncherPasswordVerification>>()
+        .await
+        .map_err(|error| format!("解析密码复验响应失败：{error}"))?;
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return Ok(false);
+    }
+    if !status.is_success() || payload.code != 2000 {
+        return Err(payload.msg);
+    }
+    Ok(payload.data.is_some_and(|data| data.valid))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -409,6 +448,7 @@ pub fn run() {
             fetch_star_servers,
             fetch_launcher_bootstrap,
             login_launcher_account,
+            verify_launcher_password,
             steam::get_local_steam_account,
             steam::load_remembered_password,
             steam::update_remembered_password,
