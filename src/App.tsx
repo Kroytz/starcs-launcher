@@ -93,6 +93,7 @@ import {
   fetchLauncherWorkshopPacks,
   loginLauncherAccount,
   updateLauncherEquipment,
+  updateStardustEquipment,
   type LauncherAccount,
   type LauncherAnnouncement,
   type LauncherBootstrap,
@@ -864,7 +865,7 @@ function BackendDataPage({ isLoading, error, onRetry }: { isLoading: boolean; er
 
 const equipmentModes = Object.entries(modeLabels)
 
-function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isEquipmentLoading, equipmentUnavailableReason, onRequireLogin, onRetryEquipment, onEquipmentOperation }: { items: LauncherInventoryItem[]; purchaseHistory: LauncherPurchaseHistoryItem[]; equipment: StarLightEquipmentProfile; isAuthenticated: boolean; isEquipmentLoading: boolean; equipmentUnavailableReason: string | null; onRequireLogin: () => void; onRetryEquipment: () => void; onEquipmentOperation: (equip: boolean, productId: number, modes: string[], team: EquipmentTargetTeam) => Promise<boolean> }) {
+function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isEquipmentLoading, equipmentUnavailableReason, onRequireLogin, onRetryEquipment, onEquipmentOperation, onStardustOperation }: { items: LauncherInventoryItem[]; purchaseHistory: LauncherPurchaseHistoryItem[]; equipment: StarLightEquipmentProfile; isAuthenticated: boolean; isEquipmentLoading: boolean; equipmentUnavailableReason: string | null; onRequireLogin: () => void; onRetryEquipment: () => void; onEquipmentOperation: (equip: boolean, productId: number, modes: string[], team: EquipmentTargetTeam) => Promise<boolean>; onStardustOperation: (equip: boolean, itemType: string, uniqueId: string) => Promise<boolean> }) {
   const [inventory, setInventory] = useState(items)
   const [purchaseHistoryOpen, setPurchaseHistoryOpen] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ itemId: string; x: number; y: number } | null>(null)
@@ -874,6 +875,7 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
   const [inventoryNotice, setInventoryNotice] = useState<string | null>(null)
   const [equipmentError, setEquipmentError] = useState<string | null>(null)
   const [isEquipmentSubmitting, setIsEquipmentSubmitting] = useState(false)
+  const [stardustPendingId, setStardustPendingId] = useState<string | null>(null)
   const [activeCategory, setActiveCategory] = useState("all")
 
   const inventoryCategories = [...new Set(inventory.map((item) => item.type || "其他"))]
@@ -914,14 +916,36 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
     })
   }
 
+  async function handleStardustToggle(item: LauncherInventoryItem) {
+    if (stardustPendingId) return
+    setStardustPendingId(item.id)
+    setInventoryNotice(null)
+    try {
+      const ok = await onStardustOperation(!item.equipped, item.stardustType, item.uniqueId)
+      if (ok) setInventoryNotice(item.equipped ? `已卸下「${item.name}」。` : `已装备「${item.name}」，同类型物品已自动替换。`)
+    } catch (error) {
+      setInventoryNotice(presentError("星尘装备失败", error, "星尘装备同步失败，请稍后重试。"))
+    } finally {
+      setStardustPendingId(null)
+    }
+  }
+
   function handleInventoryAction(item: LauncherInventoryItem) {
     if (!isAuthenticated) {
       setContextMenu(null)
       onRequireLogin()
       return
     }
-    const slot = getCosmeticSlot(item)
     setContextMenu(null)
+    if (item.source === "stardust" && item.stardustType) {
+      if (item.quantity <= 0) {
+        setInventoryNotice(`「${item.name}」数量不足。`)
+        return
+      }
+      void handleStardustToggle(item)
+      return
+    }
+    const slot = getCosmeticSlot(item)
     if (slot) {
       if (isEquipmentLoading || equipmentUnavailableReason) {
         setInventoryNotice(isEquipmentLoading ? "游戏内装备配置仍在加载，稍后即可使用装备功能。" : `装备功能暂不可用：${equipmentUnavailableReason}`)
@@ -1042,17 +1066,18 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
         {filteredInventory.map((item) => {
           const Icon = displayIcons[item.icon] ?? Package
           const itemName = item.quantity > 1 ? `${item.name} × ${item.quantity}` : item.name
+          const isStardust = item.source === "stardust" && Boolean(item.stardustType)
           const slot = getCosmeticSlot(item)
           const hasSelectableEquipmentMode = !slot || getSelectableEquipmentModes(item).length > 0
-          const isEquipped = isStarLightItemEquipped(equipment, item)
+          const isEquipped = isStardust ? item.equipped : isStarLightItemEquipped(equipment, item)
           const equippedTeams = getEquippedTeams(equipment, item)
           const equippedAllTeams = equippedTeams.ct && equippedTeams.t
           const remainingLabel = formatRemainingTime(item.expiresAt)
           return (
             <Card key={item.id} className={cn("inventory-card overflow-hidden", item.quantity <= 0 && "opacity-60")} onContextMenu={(event) => openContextMenu(event, item)}>
-              <div className={cn("relative grid aspect-[4/3] place-items-center bg-gradient-to-br", item.tone, rarityToneClass(item.rarity))}><Badge variant="outline" className={cn("absolute left-2 top-2 border-white/20 bg-black/35 text-white backdrop-blur-sm", rarityBadgeClass(item.rarity))}>{item.rarity}</Badge>{isEquipped && (equippedAllTeams ? <Badge variant="success" className="absolute bottom-2 right-2 !px-1.5" aria-label="已装备（全阵营）" title="已装备（全阵营）"><Check /><span className="sr-only">已装备（全阵营）</span></Badge> : <span className="absolute bottom-2 right-2 flex items-center gap-1" role="img" aria-label={`已装备（${equippedTeams.ct ? "CT" : "T"} 阵营）`} title={`已装备（${equippedTeams.ct ? "CT" : "T"} 阵营）`}><span className={cn("size-2.5 rounded-full ring-1 ring-black/30", equippedTeams.ct ? "bg-blue-500" : "bg-white/25")} /><span className={cn("size-2.5 rounded-full ring-1 ring-black/30", equippedTeams.t ? "bg-red-500" : "bg-white/25")} /></span>)}<Icon className="size-12 text-white/90" /></div>
+              <div className={cn("relative grid aspect-[4/3] place-items-center bg-gradient-to-br", item.tone, rarityToneClass(item.rarity))}><Badge variant="outline" className={cn("absolute left-2 top-2 border-white/20 bg-black/35 text-white backdrop-blur-sm", rarityBadgeClass(item.rarity))}>{item.rarity}</Badge>{isEquipped && (isStardust || equippedAllTeams ? <Badge variant="success" className="absolute bottom-2 right-2 !px-1.5" aria-label="已装备" title="已装备"><Check /><span className="sr-only">已装备</span></Badge> : <span className="absolute bottom-2 right-2 flex items-center gap-1" role="img" aria-label={`已装备（${equippedTeams.ct ? "CT" : "T"} 阵营）`} title={`已装备（${equippedTeams.ct ? "CT" : "T"} 阵营）`}><span className={cn("size-2.5 rounded-full ring-1 ring-black/30", equippedTeams.ct ? "bg-blue-500" : "bg-white/25")} /><span className={cn("size-2.5 rounded-full ring-1 ring-black/30", equippedTeams.t ? "bg-red-500" : "bg-white/25")} /></span>)}<Icon className="size-12 text-white/90" /></div>
               <CardHeader><Badge variant="secondary" className="w-fit">{item.type}</Badge><CardTitle className="pt-3 text-base">{itemName}</CardTitle><p className={cn("pt-1 text-xs", remainingLabel === "已过期" ? "text-red-600 dark:text-red-300" : "text-muted-foreground")}>{remainingLabel === "长期" || remainingLabel === "已过期" ? remainingLabel : `剩余 ${remainingLabel}`}</p></CardHeader>
-              <CardContent><Button variant="secondary" className="w-full" disabled={isAuthenticated && (item.quantity <= 0 || Boolean(slot && (isEquipmentLoading || equipmentUnavailableReason || !hasSelectableEquipmentMode)))} onClick={() => handleInventoryAction(item)}>{!isAuthenticated ? "登录后操作" : slot && isEquipmentLoading ? "正在读取配置" : slot && (equipmentUnavailableReason || !hasSelectableEquipmentMode) ? "模式暂不可用" : slot ? "配置装备" : "使用物品"}</Button></CardContent>
+              <CardContent><Button variant="secondary" className="w-full" disabled={isAuthenticated && (item.quantity <= 0 || stardustPendingId === item.id || Boolean(slot && (isEquipmentLoading || equipmentUnavailableReason || !hasSelectableEquipmentMode)))} onClick={() => handleInventoryAction(item)}>{!isAuthenticated ? "登录后操作" : isStardust ? (stardustPendingId === item.id ? "同步中…" : item.equipped ? "卸下" : "装备") : slot && isEquipmentLoading ? "正在读取配置" : slot && (equipmentUnavailableReason || !hasSelectableEquipmentMode) ? "模式暂不可用" : slot ? "配置装备" : "使用物品"}</Button></CardContent>
             </Card>
           )
         })}
@@ -1060,9 +1085,9 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
 
       {contextMenu && menuItem && (
         <div role="menu" className="fixed z-[100] w-48 overflow-hidden rounded-lg border border-border bg-card p-1 text-foreground shadow-xl" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()} onContextMenu={(event) => event.preventDefault()}>
-          <button role="menuitem" type="button" className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50" disabled={menuItem.quantity <= 0 || Boolean(getCosmeticSlot(menuItem) && (isEquipmentLoading || equipmentUnavailableReason || getSelectableEquipmentModes(menuItem).length === 0))} onClick={() => handleInventoryAction(menuItem)}>
-            {getCosmeticSlot(menuItem) ? <Gamepad2 className="size-4 text-primary" /> : <Zap className="size-4 text-accent" />}
-            <span><span className="block font-medium">{getCosmeticSlot(menuItem) ? "配置装备" : "使用"}</span><span className="block text-[10px] text-muted-foreground">{menuItem.name}</span></span>
+          <button role="menuitem" type="button" className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50" disabled={menuItem.quantity <= 0 || stardustPendingId === menuItem.id || Boolean(getCosmeticSlot(menuItem) && (isEquipmentLoading || equipmentUnavailableReason || getSelectableEquipmentModes(menuItem).length === 0))} onClick={() => handleInventoryAction(menuItem)}>
+            {getCosmeticSlot(menuItem) ? <Gamepad2 className="size-4 text-primary" /> : menuItem.source === "stardust" ? <Gem className="size-4 text-secondary" /> : <Zap className="size-4 text-accent" />}
+            <span><span className="block font-medium">{getCosmeticSlot(menuItem) ? "配置装备" : menuItem.source === "stardust" ? (menuItem.equipped ? "卸下" : "装备") : "使用"}</span><span className="block text-[10px] text-muted-foreground">{menuItem.name}</span></span>
           </button>
         </div>
       )}
@@ -1370,6 +1395,25 @@ function App() {
     return true
   }
 
+  async function applyStardustOperation(equip: boolean, itemType: string, uniqueId: string) {
+    if (!authToken) {
+      openLogin()
+      return false
+    }
+    const result = await updateStardustEquipment(authToken, password, itemType, uniqueId, equip)
+    if (!result.authenticated) {
+      await invalidateAuthentication()
+      return false
+    }
+    // 用返回的最新装备列表刷新本地库存的同 Type 互斥状态
+    setAuthenticatedInventory((current) => (current ?? []).map((item) => {
+      if (item.source !== "stardust" || item.stardustType !== itemType) return item
+      const isEquipped = result.equipments.some((entry) => entry.type === itemType && entry.uniqueId === item.uniqueId)
+      return { ...item, equipped: isEquipped }
+    }))
+    return true
+  }
+
   return (
     <div className="min-h-screen text-foreground">
       <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} account={steamAccount} isLoading={isSteamAccountLoading} isSubmitting={isLoginSubmitting} accountError={steamAccountError} password={password} rememberPassword={rememberPassword} loginError={loginError} onPasswordChange={setPassword} onRememberPasswordChange={setRememberPassword} onRetry={() => void loadSteamSession()} onLogin={() => void login()} />
@@ -1399,7 +1443,7 @@ function App() {
 
       {activeTab === "home" && <HomePage announcements={bootstrap?.announcements ?? []} maps={bootstrap?.maps ?? []} backendError={bootstrapError} isBackendLoading={isBootstrapLoading} onRetryBackend={() => void loadLauncherData()} />}
       {activeTab === "store" && (effectiveBootstrap ? <StorePage data={effectiveBootstrap} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
-      {activeTab === "inventory" && (bootstrap ? <InventoryPage key={isAuthenticated ? effectiveAccount?.profile.userId ?? "authenticated" : "guest"} items={isAuthenticated ? authenticatedInventory ?? [] : []} purchaseHistory={purchaseHistory} equipment={authenticatedEquipment ?? { version: 2, plugin: "star_light_store", modes: {}, unavailableModes: {} }} isAuthenticated={isAuthenticated} isEquipmentLoading={isEquipmentLoading} equipmentUnavailableReason={equipmentUnavailableReason} onRequireLogin={openLogin} onRetryEquipment={() => { if (authToken) void loadAuthenticatedEquipment(authToken, password) }} onEquipmentOperation={applyEquipmentOperation} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
+      {activeTab === "inventory" && (bootstrap ? <InventoryPage key={isAuthenticated ? effectiveAccount?.profile.userId ?? "authenticated" : "guest"} items={isAuthenticated ? authenticatedInventory ?? [] : []} purchaseHistory={purchaseHistory} equipment={authenticatedEquipment ?? { version: 2, plugin: "star_light_store", modes: {}, unavailableModes: {} }} isAuthenticated={isAuthenticated} isEquipmentLoading={isEquipmentLoading} equipmentUnavailableReason={equipmentUnavailableReason} onRequireLogin={openLogin} onRetryEquipment={() => { if (authToken) void loadAuthenticatedEquipment(authToken, password) }} onEquipmentOperation={applyEquipmentOperation} onStardustOperation={applyStardustOperation} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
       {activeTab === "profile" && <ProfilePage account={effectiveAccount} purchaseHistory={purchaseHistory} seasonPass={seasonPass} penalties={penalties} steamAccount={steamAccount} isAuthenticated={isAuthenticated} theme={theme} onThemeChange={setTheme} onLogin={openLogin} onLogout={logout} />}
     </div>
   )

@@ -205,6 +205,10 @@ struct LauncherInventoryItem {
     weapon_prefab: String,
     #[serde(default)]
     weapon_type: String,
+    #[serde(default)]
+    equipped: bool,
+    #[serde(default)]
+    stardust_type: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -315,6 +319,28 @@ struct LauncherEquipmentMutationRequest {
 struct LauncherEquipmentCommandResult {
     authenticated: bool,
     equipment: Option<serde_json::Value>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StardustEquipmentMutationRequest {
+    item_type: String,
+    unique_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StardustEquipment {
+    r#type: String,
+    unique_id: String,
+    slot: i32,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StardustEquipmentCommandResult {
+    authenticated: bool,
+    equipments: Vec<StardustEquipment>,
 }
 
 fn query_a2s_latency(ip: &str, port: u16) -> Option<u64> {
@@ -584,6 +610,56 @@ async fn parse_equipment_response(
     })
 }
 
+#[tauri::command]
+async fn update_stardust_equipment(
+    token: String,
+    password: String,
+    item_type: String,
+    unique_id: String,
+    equip: bool,
+) -> Result<StardustEquipmentCommandResult, String> {
+    let backend_url = std::env::var("STAR_LAUNCHER_BACKEND_URL")
+        .unwrap_or_else(|_| DEFAULT_LAUNCHER_BACKEND_URL.to_string());
+    let action = if equip { "equip" } else { "unequip" };
+    let request_url = format!(
+        "{}/api/v1/me/stardust/{action}",
+        backend_url.trim_end_matches('/')
+    );
+    let response = reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .build()
+        .map_err(|error| format!("创建星尘装备请求客户端失败：{error}"))?
+        .post(&request_url)
+        .bearer_auth(token)
+        .header("X-StarCS-Reauth", password)
+        .json(&StardustEquipmentMutationRequest {
+            item_type,
+            unique_id,
+        })
+        .send()
+        .await
+        .map_err(|error| format!("连接星尘装备服务失败（{request_url}）：{error}"))?;
+
+    let status = response.status();
+    let payload = response
+        .json::<OptionalApiEnvelope<Vec<StardustEquipment>>>()
+        .await
+        .map_err(|error| format!("解析星尘装备响应失败：{error}"))?;
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return Ok(StardustEquipmentCommandResult {
+            authenticated: false,
+            equipments: Vec::new(),
+        });
+    }
+    if !status.is_success() || payload.code != 2000 {
+        return Err(payload.msg);
+    }
+    Ok(StardustEquipmentCommandResult {
+        authenticated: true,
+        equipments: payload.data.unwrap_or_default(),
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -596,6 +672,7 @@ pub fn run() {
             verify_launcher_password,
             fetch_launcher_equipment,
             update_launcher_equipment,
+            update_stardust_equipment,
             steam::get_local_steam_account,
             steam::load_remembered_password,
             steam::update_remembered_password,

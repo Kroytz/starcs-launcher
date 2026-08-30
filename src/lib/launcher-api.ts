@@ -84,6 +84,8 @@ export type LauncherInventoryItem = {
   useLimitInfo: string
   weaponPrefab: string
   weaponType: string
+  equipped: boolean
+  stardustType: string
 }
 
 export type StarLightPlayerSkinPreference = {
@@ -232,4 +234,19 @@ export async function fetchLauncherEquipment(token: string, password: string) {
 
 export async function updateLauncherEquipment(token: string, password: string, productId: number, modes: string[], team: "all" | "ct" | "t", equip: boolean) {
   return invoke<LauncherEquipmentCommandResult>("update_launcher_equipment", { token, password, productId, modes, team, equip })
+}
+
+export type StardustEquipment = {
+  type: string
+  uniqueId: string
+  slot: number
+}
+
+export type StardustEquipmentCommandResult = {
+  authenticated: boolean
+  equipments: StardustEquipment[]
+}
+
+export async function updateStardustEquipment(token: string, password: string, itemType: string, uniqueId: string, equip: boolean) {
+  return invoke<StardustEquipmentCommandResult>("update_stardust_equipment", { token, password, itemType, uniqueId, equip })
 }
