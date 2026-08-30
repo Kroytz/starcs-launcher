@@ -672,7 +672,7 @@ const equipmentStorageKey = "star-launcher-equipment"
 
 function getCosmeticSlot(item: LauncherInventoryItem): CosmeticSlot | null {
   if (item.type === "武器外观") return "weapon"
-  if (item.type === "玩家外观") return "player"
+  if (item.type === "角色外观" || item.type === "玩家外观") return "player"
   return null
 }
 
@@ -807,7 +807,7 @@ function InventoryPage({ items, isAuthenticated, onRequireLogin }: { items: Laun
   return (
     <main className="page-shell inventory-page-shell">
       <PageHeading eyebrow="我的库存" title="已拥有的物品" description="展示当前账号可用的全部物品；外观配置仅保存在本机，使用与同步暂未开放。" action={<Button variant="outline"><Boxes />全部物品 {inventory.length}</Button>} />
-      {!isAuthenticated && <div className="mb-4 flex flex-col justify-between gap-3 rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><span>登录后可使用消耗品，并配置武器与玩家外观。</span><Button size="sm" onClick={onRequireLogin}><LogIn />登录</Button></div>}
+      {!isAuthenticated && <div className="mb-4 flex flex-col justify-between gap-3 rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><span>登录后可使用消耗品，并配置武器与角色外观。</span><Button size="sm" onClick={onRequireLogin}><LogIn />登录</Button></div>}
       {inventoryNotice && <div className="mb-4 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm">{inventoryNotice}</div>}
       <div className="inventory-grid">
         {inventory.map((item) => {
