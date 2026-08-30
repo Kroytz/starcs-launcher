@@ -611,7 +611,7 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
                 <div><Trophy className="mx-auto mb-1 size-4 text-muted-foreground" /><div className="text-sm font-medium">{selected.scoreCt}:{selected.scoreT}</div><div className="text-[10px] text-muted-foreground">CT / T</div></div>
               </div>
               <div className="mb-5 flex flex-wrap gap-2">{selected.tags.map((tag) => <Badge key={tag} variant="secondary">{tag}</Badge>)}</div>
-              <Button size="lg" className="w-full" disabled={!isServerJoinable(selected) || joiningServerId !== null} onClick={() => prepareJoin(selected)}><Gamepad2 />{joiningServerId ? "正在启动并等待 CS2…" : isServerJoinable(selected) ? "加入服务器" : "服务器已满"}</Button>
+              <Button size="lg" className="w-full" disabled={joiningServerId !== null} onClick={() => prepareJoin(selected)}><Gamepad2 />{joiningServerId ? "正在启动并等待 CS2…" : selected.status === "full" ? "尝试加入服务器" : "加入服务器"}</Button>
               <p className="mt-2 text-center text-[11px] text-muted-foreground">从登录器启动时将强制使用 -worldwide，并在 CS2 初始化完成后连接。</p>
               {joinError && <div className="mt-3 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300">{joinError}</div>}
             </CardContent>
