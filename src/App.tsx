@@ -872,8 +872,23 @@ function InventoryPage({ items, purchaseHistory, isAuthenticated, onRequireLogin
 
   return (
     <main className="page-shell inventory-page-shell">
-      <PageHeading eyebrow="我的库存" title="已拥有的物品" description="展示当前账号可用的全部物品；外观配置仅保存在本机，使用与同步暂未开放。" action={isAuthenticated ? <div className="flex flex-col gap-2 sm:items-end"><Button variant="outline" onClick={() => setPurchaseHistoryOpen(true)}><ShoppingBag />最近购买 {purchaseHistory.length}</Button><Button variant="outline"><Boxes />全部物品 {inventory.length}</Button></div> : undefined} />
-      {!isAuthenticated && <Card><CardContent className="flex flex-col items-center py-20 text-center"><div className="mb-4 grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary"><Backpack className="size-7" /></div><CardTitle>登录后查看真实库存</CardTitle><CardDescription className="mt-2 max-w-md leading-6">登录可以管理已拥有的道具，并为不同模式和阵营配置武器与角色外观。</CardDescription><Button className="mt-6" onClick={onRequireLogin}><LogIn />登录并读取库存</Button></CardContent></Card>}
+      <PageHeading eyebrow="我的库存" title={isAuthenticated ? "已拥有的物品" : "登录并解锁装备库"} description={isAuthenticated ? "展示当前账号可用的全部物品；外观配置仅保存在本机，使用与同步暂未开放。" : "连接当前 Steam 账号，立即查看真实库存并管理外观配置。"} action={isAuthenticated ? <div className="flex flex-col gap-2 sm:items-end"><Button variant="outline" onClick={() => setPurchaseHistoryOpen(true)}><ShoppingBag />最近购买 {purchaseHistory.length}</Button><Button variant="outline"><Boxes />全部物品 {inventory.length}</Button></div> : undefined} />
+      {!isAuthenticated && <section className="grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)]" aria-label="登录后解锁库存">
+        <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/[0.14] via-card to-secondary/[0.12]">
+          <div className="pointer-events-none absolute -left-20 -top-24 size-72 rounded-full bg-primary/20 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-28 right-4 size-72 rounded-full bg-accent/15 blur-3xl" />
+          <div className="pointer-events-none absolute right-8 top-8 hidden grid-cols-2 gap-3 opacity-35 sm:grid" aria-hidden="true"><div className="grid size-20 place-items-center rounded-2xl border border-primary/25 bg-card/60 text-primary backdrop-blur-sm"><Zap className="size-8" /></div><div className="grid size-20 place-items-center rounded-2xl border border-secondary/25 bg-card/60 text-secondary backdrop-blur-sm"><UserRound className="size-8" /></div><div className="col-span-2 grid h-16 place-items-center rounded-2xl border border-accent/20 bg-card/60 text-accent backdrop-blur-sm"><Gamepad2 className="size-7" /></div></div>
+          <CardContent className="relative flex min-h-[360px] flex-col justify-between p-8 sm:p-10">
+            <div className="max-w-xl"><Badge variant="outline" className="border-primary/25 bg-primary/10 text-primary"><KeyRound />登录后立即解锁</Badge><div className="mt-6 grid size-16 place-items-center rounded-2xl bg-gradient-to-br from-primary to-secondary text-white shadow-xl"><Backpack className="size-8" /></div><h2 className="mt-6 text-3xl font-semibold tracking-tight">登录 STARCS，带上你的装备</h2><p className="mt-3 max-w-lg text-sm leading-7 text-muted-foreground">自动读取当前 Steam 账号的真实库存，管理已拥有的道具，并为不同服务器模式与阵营配置专属外观。</p></div>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center"><Button size="lg" className="min-w-48 shadow-lg shadow-primary/20" onClick={onRequireLogin}><LogIn />立即登录</Button><span className="text-xs text-muted-foreground">点击后重新识别当前 Steam Session</span></div>
+          </CardContent>
+        </Card>
+        <div className="grid gap-4">
+          <Card><CardContent className="flex min-h-[104px] items-center gap-4 p-5"><div className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><Boxes /></div><div><CardTitle className="text-base">真实库存同步</CardTitle><CardDescription className="mt-1 leading-5">只展示当前账号实际持有且仍然有效的物品。</CardDescription></div></CardContent></Card>
+          <Card><CardContent className="flex min-h-[104px] items-center gap-4 p-5"><div className="grid size-11 shrink-0 place-items-center rounded-xl bg-secondary/15 text-secondary"><Gamepad2 /></div><div><CardTitle className="text-base">模式与阵营配置</CardTitle><CardDescription className="mt-1 leading-5">为武器和角色外观分别选择模式、CT、T 或所有阵营。</CardDescription></div></CardContent></Card>
+          <Card><CardContent className="flex min-h-[104px] items-center gap-4 p-5"><div className="grid size-11 shrink-0 place-items-center rounded-xl bg-accent/10 text-accent"><ShieldCheck /></div><div><CardTitle className="text-base">配置保存在本机</CardTitle><CardDescription className="mt-1 leading-5">当前装备偏好只与启动器绑定，不会改动 Steam 文件。</CardDescription></div></CardContent></Card>
+        </div>
+      </section>}
       {isAuthenticated && inventoryNotice && <div className="mb-4 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm">{inventoryNotice}</div>}
       {isAuthenticated && <div className="inventory-grid">
         {inventory.map((item) => {
