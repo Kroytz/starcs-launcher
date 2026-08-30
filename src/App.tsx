@@ -73,6 +73,7 @@ import {
   getConfiguredProductIds,
   getCosmeticSlot,
   getEquipmentValidationError,
+  getEquippedTeams,
   isStarLightItemEquipped,
   productModeIsAllowed,
   type EquipmentTargetTeam,
@@ -873,9 +874,14 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
   const [inventoryNotice, setInventoryNotice] = useState<string | null>(null)
   const [equipmentError, setEquipmentError] = useState<string | null>(null)
   const [isEquipmentSubmitting, setIsEquipmentSubmitting] = useState(false)
+  const [activeCategory, setActiveCategory] = useState("all")
+
+  const inventoryCategories = [...new Set(inventory.map((item) => item.type || "其他"))]
+  const filteredInventory = activeCategory === "all" ? inventory : inventory.filter((item) => (item.type || "其他") === activeCategory)
 
   useEffect(() => {
     setInventory(items)
+    setActiveCategory("all")
   }, [items])
 
   useEffect(() => {
@@ -970,7 +976,7 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
     try {
       if (!await onEquipmentOperation(true, productId, selectedEquipmentModes, equipmentTeam)) return
       const teamLabel = slot === "weapon" ? "全阵营" : equipmentTeam === "all" ? "所有阵营" : equipmentTeam.toUpperCase()
-      setInventoryNotice(`已将「${equippingItem.name}」同步到游戏内配置：${selectedEquipmentModes.length} 个模式 · ${teamLabel}。`)
+      setInventoryNotice(`已将「${equippingItem.name}」装配到游戏内配置：${selectedEquipmentModes.length} 个模式 · ${teamLabel}。`)
       setEquippingItem(null)
     } catch (error) {
       setEquipmentError(presentError("装备物品失败", error, "装备同步未能完成，请稍后重试。"))
@@ -988,7 +994,8 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
     setIsEquipmentSubmitting(true)
     try {
       if (!await onEquipmentOperation(false, productId, selectedEquipmentModes, equipmentTeam)) return
-      setInventoryNotice(`已从游戏内配置卸下「${equippingItem.name}」的所选模式。`)
+      const teamLabel = slot === "weapon" ? "全阵营" : equipmentTeam === "all" ? "所有阵营" : equipmentTeam.toUpperCase()
+      setInventoryNotice(`已将「${equippingItem.name}」从游戏内配置卸载：${selectedEquipmentModes.length} 个模式 · ${teamLabel}。`)
       setEquippingItem(null)
     } catch (error) {
       setEquipmentError(presentError("卸下物品失败", error, "卸下操作未能完成，请稍后重试。"))
@@ -1007,7 +1014,7 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
 
   return (
     <main className="page-shell inventory-page-shell">
-      <PageHeading eyebrow="我的库存" title={isAuthenticated ? "已拥有的物品" : "登录并解锁装备库"} description={isAuthenticated ? "展示当前账号可用的全部物品；装备配置会同步到各模式游戏服务器。" : "连接当前 Steam 账号，立即查看真实库存并管理外观配置。"} action={isAuthenticated ? <div className="flex flex-col gap-2 sm:items-end"><Button variant="outline" onClick={() => setPurchaseHistoryOpen(true)}><ShoppingBag />最近购买 {purchaseHistory.length}</Button><Button variant="outline"><Boxes />全部物品 {inventory.length}</Button></div> : undefined} />
+      <PageHeading eyebrow="我的库存" title={isAuthenticated ? "已拥有的物品" : "登录并解锁装备库"} description={isAuthenticated ? "展示当前账号可用的全部物品；装备配置会同步到各模式游戏服务器。" : "连接当前 Steam 账号，立即查看真实库存并管理外观配置。"} action={isAuthenticated ? <Button variant="outline" onClick={() => setPurchaseHistoryOpen(true)}><ShoppingBag />最近购买 {purchaseHistory.length}</Button> : undefined} />
       {!isAuthenticated && <section className="grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)]" aria-label="登录后解锁库存">
         <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/[0.14] via-card to-secondary/[0.12]">
           <div className="pointer-events-none absolute -left-20 -top-24 size-72 rounded-full bg-primary/20 blur-3xl" />
@@ -1027,18 +1034,24 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
       {isAuthenticated && inventoryNotice && <div className="pointer-events-none fixed inset-x-0 top-[76px] z-30 flex justify-center px-4"><div className="pointer-events-auto flex max-w-xl items-start gap-3 rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm shadow-lg shadow-black/5 backdrop-blur-md"><Info className="mt-0.5 size-4 shrink-0 text-primary" /><span className="leading-5">{inventoryNotice}</span><button type="button" aria-label="关闭提示" className="mt-0.5 shrink-0 text-muted-foreground transition-colors hover:text-foreground" onClick={() => setInventoryNotice(null)}><X className="size-4" /></button></div></div>}
       {isAuthenticated && (isEquipmentLoading || equipmentUnavailableReason) && <div className="mb-4 flex flex-col justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><div><div className="font-medium text-amber-700 dark:text-amber-200">{isEquipmentLoading ? "正在同步游戏内装备配置" : "装备功能暂不可用"}</div><div className="mt-1 text-xs text-muted-foreground">{isEquipmentLoading ? "库存和其他登录功能可以正常使用。" : equipmentUnavailableReason}</div></div>{equipmentUnavailableReason && <Button variant="outline" size="sm" onClick={onRetryEquipment}><RefreshCw />重新读取</Button>}</div>}
       {isAuthenticated && !isEquipmentLoading && !equipmentUnavailableReason && unavailableModeEntries.length > 0 && <div className="mb-4 flex flex-col justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><div><div className="font-medium text-amber-700 dark:text-amber-200">部分模式的装备配置暂不可用</div><div className="mt-1 text-xs text-muted-foreground">暂不可用：{unavailableModeEntries.map(([mode]) => modeLabels[mode] ?? mode).join("、")}。其他模式可以正常配置。</div></div><Button variant="outline" size="sm" onClick={onRetryEquipment}><RefreshCw />重新读取</Button></div>}
+      {isAuthenticated && <div className="store-category-scroll mb-4 flex items-center gap-2 overflow-x-auto pb-1" aria-label="库存分类">
+        <Button size="sm" className="shrink-0" variant={activeCategory === "all" ? "secondary" : "outline"} onClick={() => setActiveCategory("all")}>全部 {inventory.length}</Button>
+        {inventoryCategories.map((category) => <Button key={category} size="sm" className="shrink-0" variant={activeCategory === category ? "secondary" : "outline"} onClick={() => setActiveCategory(category)}>{category} {inventory.filter((item) => (item.type || "其他") === category).length}</Button>)}
+      </div>}
       {isAuthenticated && <div className="inventory-grid">
-        {inventory.map((item) => {
+        {filteredInventory.map((item) => {
           const Icon = displayIcons[item.icon] ?? Package
           const itemName = item.quantity > 1 ? `${item.name} × ${item.quantity}` : item.name
           const slot = getCosmeticSlot(item)
           const hasSelectableEquipmentMode = !slot || getSelectableEquipmentModes(item).length > 0
           const isEquipped = isStarLightItemEquipped(equipment, item)
+          const equippedTeams = getEquippedTeams(equipment, item)
+          const equippedAllTeams = equippedTeams.ct && equippedTeams.t
           const remainingLabel = formatRemainingTime(item.expiresAt)
           return (
             <Card key={item.id} className={cn("inventory-card overflow-hidden", item.quantity <= 0 && "opacity-60")} onContextMenu={(event) => openContextMenu(event, item)}>
-              <div className={cn("relative grid aspect-[4/3] place-items-center bg-gradient-to-br", item.tone, rarityToneClass(item.rarity))}><div className="absolute right-2 top-2 flex items-center gap-1"><Badge variant="outline" className={cn("border-white/20 bg-black/35 text-white backdrop-blur-sm", rarityBadgeClass(item.rarity))}>{item.rarity}</Badge>{isEquipped && <Badge variant="success"><Check />已装备</Badge>}</div><Icon className="size-12 text-white/90" /></div>
-              <CardHeader><Badge variant="secondary" className="w-fit">{item.type}</Badge><CardTitle className="pt-3 text-base">{itemName}</CardTitle><p className={cn("pt-1 text-xs", remainingLabel === "已过期" ? "text-red-600 dark:text-red-300" : "text-muted-foreground")}>{remainingLabel ? `剩余 ${remainingLabel}` : "永久有效"}</p></CardHeader>
+              <div className={cn("relative grid aspect-[4/3] place-items-center bg-gradient-to-br", item.tone, rarityToneClass(item.rarity))}><Badge variant="outline" className={cn("absolute left-2 top-2 border-white/20 bg-black/35 text-white backdrop-blur-sm", rarityBadgeClass(item.rarity))}>{item.rarity}</Badge>{isEquipped && (equippedAllTeams ? <Badge variant="success" className="absolute bottom-2 right-2 !px-1.5" aria-label="已装备（全阵营）" title="已装备（全阵营）"><Check /><span className="sr-only">已装备（全阵营）</span></Badge> : <span className="absolute bottom-2 right-2 flex items-center gap-1" role="img" aria-label={`已装备（${equippedTeams.ct ? "CT" : "T"} 阵营）`} title={`已装备（${equippedTeams.ct ? "CT" : "T"} 阵营）`}><span className={cn("size-2.5 rounded-full ring-1 ring-black/30", equippedTeams.ct ? "bg-blue-500" : "bg-white/25")} /><span className={cn("size-2.5 rounded-full ring-1 ring-black/30", equippedTeams.t ? "bg-red-500" : "bg-white/25")} /></span>)}<Icon className="size-12 text-white/90" /></div>
+              <CardHeader><Badge variant="secondary" className="w-fit">{item.type}</Badge><CardTitle className="pt-3 text-base">{itemName}</CardTitle><p className={cn("pt-1 text-xs", remainingLabel === "已过期" ? "text-red-600 dark:text-red-300" : "text-muted-foreground")}>{remainingLabel === "长期" || remainingLabel === "已过期" ? remainingLabel : `剩余 ${remainingLabel}`}</p></CardHeader>
               <CardContent><Button variant="secondary" className="w-full" disabled={isAuthenticated && (item.quantity <= 0 || Boolean(slot && (isEquipmentLoading || equipmentUnavailableReason || !hasSelectableEquipmentMode)))} onClick={() => handleInventoryAction(item)}>{!isAuthenticated ? "登录后操作" : slot && isEquipmentLoading ? "正在读取配置" : slot && (equipmentUnavailableReason || !hasSelectableEquipmentMode) ? "模式暂不可用" : slot ? "配置装备" : "使用物品"}</Button></CardContent>
             </Card>
           )
@@ -1089,12 +1102,14 @@ function formatLauncherDate(value: string) {
 }
 
 // 只保留最大时间单位：1 天、3 小时、30 分钟……
+// 无到期时间（永久）或剩余超过 1 年的，统一显示“长期”。
 function formatRemainingTime(expiresAt: string) {
-  if (!expiresAt) return null
+  if (!expiresAt) return "长期"
   const expiry = new Date(expiresAt)
-  if (Number.isNaN(expiry.getTime())) return null
+  if (Number.isNaN(expiry.getTime())) return "长期"
   const remainingMs = expiry.getTime() - Date.now()
   if (remainingMs <= 0) return "已过期"
+  if (remainingMs > 365 * 86_400_000) return "长期"
   const minutes = Math.floor(remainingMs / 60_000)
   if (minutes < 1) return "不足 1 分钟"
   const hours = Math.floor(minutes / 60)

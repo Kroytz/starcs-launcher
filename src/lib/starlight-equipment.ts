@@ -65,3 +65,25 @@ export function isStarLightItemEquipped(profile: StarLightEquipmentProfile, item
       || Object.values(modePrefs.w_s.player_skin_exclusive).some((types) => Object.values(types).includes(productId))
   })
 }
+
+// 返回物品装备的阵营；武器外观对两个阵营同时生效，角色外观按 ct/t 分别判断。
+export function getEquippedTeams(profile: StarLightEquipmentProfile, item: LauncherInventoryItem): { ct: boolean; t: boolean } {
+  const none = { ct: false, t: false }
+  const productId = getStarLightProductId(item)
+  const slot = getCosmeticSlot(item)
+  if (productId === null || !slot) return none
+  if (slot === "weapon") {
+    const equipped = Object.values(profile.modes).some((modePrefs) =>
+      Object.values(modePrefs.w_s.weapons).some((prefabs) => Object.values(prefabs).includes(productId))
+      || Object.values(modePrefs.w_s.player_skin_exclusive).some((types) => Object.values(types).includes(productId)))
+    return equipped ? { ct: true, t: true } : none
+  }
+  let ct = false
+  let t = false
+  for (const modePrefs of Object.values(profile.modes)) {
+    if (modePrefs.p_s.ct === productId) ct = true
+    if (modePrefs.p_s.t === productId) t = true
+    if (ct && t) break
+  }
+  return { ct, t }
+}
