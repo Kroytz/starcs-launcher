@@ -97,12 +97,19 @@ button { cursor: pointer; }
   padding: 0 28px;
   background: color-mix(in srgb, var(--background) 86%, transparent);
   backdrop-filter: blur(20px);
+  user-select: none;
 }
 
 .brand { display: flex; width: fit-content; align-items: center; gap: 10px; border: 0; color: inherit; background: transparent; }
 .brand-logo { width: 36px; height: 36px; object-fit: contain; filter: drop-shadow(0 0 12px rgb(109 126 216 / 28%)); }
 .app-tabs { display: flex; align-items: center; gap: 4px; border: 1px solid var(--border); border-radius: 10px; padding: 4px; background: color-mix(in srgb, var(--card) 88%, transparent); }
 .header-actions { justify-self: end; }
+.window-controls { display: flex; align-items: center; gap: 2px; margin-left: 6px; border-left: 1px solid var(--border); padding-left: 7px; }
+.window-control { display: grid; width: 38px; height: 32px; place-items: center; border: 1px solid transparent; border-radius: 8px; color: var(--muted-foreground); background: transparent; transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease; }
+.window-control:hover { border-color: var(--border); color: var(--foreground); background: color-mix(in srgb, var(--color-primary) 10%, transparent); }
+.window-control:active { transform: translateY(1px); }
+.window-control svg { width: 14px; height: 14px; stroke-width: 1.8; }
+.window-control-close:hover { border-color: rgb(239 68 68 / 35%); color: white; background: #dc2626; }
 .page-shell { width: 100%; max-width: 1440px; margin: 0 auto; padding: 28px; }
 .home-page-shell { padding-top: 20px; padding-bottom: 20px; }
 .theme-switcher { display: flex; width: fit-content; flex-wrap: wrap; gap: 4px; border: 1px solid var(--border); border-radius: 10px; padding: 4px; background: color-mix(in srgb, var(--background) 68%, transparent); }

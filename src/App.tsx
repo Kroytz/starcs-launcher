@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { getCurrentWindow } from "@tauri-apps/api/window"
 import { openUrl } from "@tauri-apps/plugin-opener"
 import type { LucideIcon } from "lucide-react"
 import {
@@ -21,6 +22,7 @@ import {
   KeyRound,
   LogIn,
   Map,
+  Minus,
   Monitor,
   Moon,
   Package,
@@ -33,10 +35,12 @@ import {
   Signal,
   Sparkles,
   Star,
+  Square,
   Sun,
   Trophy,
   UserRound,
   Users,
+  X,
   Zap,
 } from "lucide-react"
 
@@ -100,6 +104,8 @@ const tabs: Array<{ id: AppTab; label: string; icon: LucideIcon }> = [
   { id: "inventory", label: "库存", icon: Backpack },
   { id: "profile", label: "我", icon: UserRound },
 ]
+
+const appWindow = getCurrentWindow()
 
 const themeOptions: Array<{ id: ThemePreference; label: string; icon: LucideIcon }> = [
   { id: "system", label: "跟随系统", icon: Monitor },
@@ -1090,7 +1096,7 @@ function App() {
   return (
     <div className="min-h-screen text-foreground">
       <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} account={steamAccount} isLoading={isSteamAccountLoading} isSubmitting={isLoginSubmitting} accountError={steamAccountError} password={password} rememberPassword={rememberPassword} loginError={loginError} onPasswordChange={setPassword} onRememberPasswordChange={setRememberPassword} onRetry={() => void loadSteamSession()} onLogin={() => void login()} />
-      <header className="app-header">
+      <header className="app-header" data-tauri-drag-region>
         <button className="brand" onClick={() => setActiveTab("home")} aria-label="返回首页">
           <img src={starLogo} alt="StarCS" className="brand-logo" />
           <div className="text-left"><div className="text-sm font-bold tracking-[0.2em]">STARCS</div><div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Launcher</div></div>
@@ -1106,6 +1112,11 @@ function App() {
         <div className="header-actions flex items-center gap-1">
           <Button variant="ghost" size="icon" aria-label="通知"><Bell /></Button>
           <Button variant="ghost" className="theme-cycle" onClick={cycleTheme} title={`当前：${currentTheme.label}（系统为${resolvedTheme === "dark" ? "深色" : "浅色"}）`}><CurrentThemeIcon /><span>{currentTheme.label}</span></Button>
+          <div className="window-controls" aria-label="窗口控制">
+            <button type="button" className="window-control" aria-label="最小化" title="最小化" onClick={() => void appWindow.minimize()}><Minus /></button>
+            <button type="button" className="window-control" aria-label="最大化或还原" title="最大化或还原" onClick={() => void appWindow.toggleMaximize()}><Square /></button>
+            <button type="button" className="window-control window-control-close" aria-label="关闭" title="关闭" onClick={() => void appWindow.close()}><X /></button>
+          </div>
         </div>
       </header>
 
