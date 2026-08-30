@@ -84,6 +84,7 @@ import {
   type Server,
   type ServerStatus,
 } from "@/lib/servers"
+import { dismissResourceReminder, isResourceReminderDismissed } from "@/lib/resource-reminder"
 import {
   fetchLauncherBootstrap,
   fetchLauncherEquipment,
@@ -415,6 +416,8 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
   const [resourcePacks, setResourcePacks] = useState<LauncherWorkshopPack[]>([])
   const [isResourceLoading, setIsResourceLoading] = useState(false)
   const [resourceDialogError, setResourceDialogError] = useState<string | null>(null)
+  const [dismissCurrentModeReminder, setDismissCurrentModeReminder] = useState(false)
+  const [joinError, setJoinError] = useState<string | null>(null)
   const initialFetchStarted = useRef(false)
 
   const loadServers = useCallback(async () => {
@@ -481,6 +484,12 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
   }
 
   function prepareJoin(server: Server) {
+    setJoinError(null)
+    if (isResourceReminderDismissed(server.mode)) {
+      void joinServer(server, false)
+      return
+    }
+    setDismissCurrentModeReminder(false)
     setResourceDialogServer(server)
     setResourcePacks([])
     void loadResourcePacks(server)
@@ -495,15 +504,18 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
     }
   }
 
-  async function joinServer(server: Server) {
+  async function joinServer(server: Server, showErrorInDialog = true) {
     if (joiningServerId) return
     setJoiningServerId(server.id)
     setResourceDialogError(null)
+    setJoinError(null)
     try {
       await launchAndConnectServer(server.address)
       setResourceDialogServer(null)
     } catch (error) {
-      setResourceDialogError(presentError("启动或连接 CS2 失败", error, "游戏启动或连接请求未能完成，请稍后重试。"))
+      const message = presentError("启动或连接 CS2 失败", error, "游戏启动或连接请求未能完成，请稍后重试。")
+      if (showErrorInDialog) setResourceDialogError(message)
+      else setJoinError(message)
     } finally {
       setJoiningServerId(null)
     }
@@ -601,6 +613,7 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
               <div className="mb-5 flex flex-wrap gap-2">{selected.tags.map((tag) => <Badge key={tag} variant="secondary">{tag}</Badge>)}</div>
               <Button size="lg" className="w-full" disabled={!isServerJoinable(selected) || joiningServerId !== null} onClick={() => prepareJoin(selected)}><Gamepad2 />{joiningServerId ? "正在启动并等待 CS2…" : isServerJoinable(selected) ? "加入服务器" : "服务器已满"}</Button>
               <p className="mt-2 text-center text-[11px] text-muted-foreground">从登录器启动时将强制使用 -worldwide，并在 CS2 初始化完成后连接。</p>
+              {joinError && <div className="mt-3 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300">{joinError}</div>}
             </CardContent>
           </Card>
         ) : (
@@ -629,12 +642,13 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
             ))}
             {!isResourceLoading && resourcePacks.length === 0 && !resourceDialogError && <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">当前模式暂未配置资源包，可直接启动游戏。</div>}
             {resourceDialogError && <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300">{resourceDialogError}</div>}
+            {resourceDialogServer && <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2.5 text-sm"><input type="checkbox" className="size-4 accent-[var(--color-primary)]" checked={dismissCurrentModeReminder} disabled={joiningServerId !== null} onChange={(event) => setDismissCurrentModeReminder(event.target.checked)} /><span>不再提醒{modeLabels[resourceDialogServer.mode] ?? resourceDialogServer.mode}模式</span></label>}
           </div>
 
           <DialogFooter>
             <Button variant="outline" disabled={joiningServerId !== null} onClick={() => setResourceDialogServer(null)}>稍后再说</Button>
             {resourceDialogError && resourcePacks.length === 0 && resourceDialogServer && !joiningServerId && <Button variant="outline" disabled={isResourceLoading} onClick={() => void loadResourcePacks(resourceDialogServer)}><RefreshCw className={cn(isResourceLoading && "animate-spin")} />重试加载</Button>}
-            <Button disabled={!resourceDialogServer || joiningServerId !== null} onClick={() => resourceDialogServer && void joinServer(resourceDialogServer)}><Gamepad2 />{joiningServerId ? "正在启动并等待 CS2…" : "继续启动"}</Button>
+            <Button disabled={!resourceDialogServer || joiningServerId !== null} onClick={() => { if (!resourceDialogServer) return; if (dismissCurrentModeReminder) dismissResourceReminder(resourceDialogServer.mode); void joinServer(resourceDialogServer) }}><Gamepad2 />{joiningServerId ? "正在启动并等待 CS2…" : "继续启动"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
