@@ -261,7 +261,7 @@ function LoginDialog({ open, onOpenChange, account, isLoading, isSubmitting, acc
   const [showPassword, setShowPassword] = useState(false)
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!isSubmitting) onOpenChange(nextOpen) }}>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader className="text-center sm:text-center">
           <div className="mx-auto mb-2 grid size-11 place-items-center rounded-xl bg-primary/12 text-primary"><LogIn /></div>
@@ -791,6 +791,7 @@ function InventoryPage({ items, purchaseHistory, steamId, isAuthenticated, onReq
   const [equipmentTeam, setEquipmentTeam] = useState<EquipmentTargetTeam>("all")
   const [equipment, setEquipment] = useState(() => loadStarLightEquipment(steamId, items))
   const [inventoryNotice, setInventoryNotice] = useState<string | null>(null)
+  const [equipmentError, setEquipmentError] = useState<string | null>(null)
   const [isEquipmentSubmitting, setIsEquipmentSubmitting] = useState(false)
 
   useEffect(() => {
@@ -854,6 +855,7 @@ function InventoryPage({ items, purchaseHistory, steamId, isAuthenticated, onReq
         const retained = current.filter((mode) => allowedModes.includes(mode))
         return retained.length > 0 ? retained : [allowedModes[0]]
       })
+      setEquipmentError(null)
       setEquippingItem(item)
       return
     }
@@ -873,6 +875,7 @@ function InventoryPage({ items, purchaseHistory, steamId, isAuthenticated, onReq
     if (!equippingItem) return
     const slot = getCosmeticSlot(equippingItem)
     if (!slot || selectedEquipmentModes.length === 0) return
+    setEquipmentError(null)
     setIsEquipmentSubmitting(true)
     try {
       if (!await onVerifyOperation()) return
@@ -881,7 +884,7 @@ function InventoryPage({ items, purchaseHistory, steamId, isAuthenticated, onReq
       setInventoryNotice(`已将「${equippingItem.name}」保存到本机配置：${selectedEquipmentModes.length} 个模式 · ${teamLabel}（尚未同步服务器）。`)
       setEquippingItem(null)
     } catch (error) {
-      setInventoryNotice(error instanceof Error ? error.message : String(error))
+      setEquipmentError(error instanceof Error ? error.message : String(error))
     } finally {
       setIsEquipmentSubmitting(false)
     }
@@ -891,6 +894,7 @@ function InventoryPage({ items, purchaseHistory, steamId, isAuthenticated, onReq
     if (!equippingItem) return
     const slot = getCosmeticSlot(equippingItem)
     if (!slot || selectedEquipmentModes.length === 0) return
+    setEquipmentError(null)
     setIsEquipmentSubmitting(true)
     try {
       if (!await onVerifyOperation()) return
@@ -898,7 +902,7 @@ function InventoryPage({ items, purchaseHistory, steamId, isAuthenticated, onReq
       setInventoryNotice(`已从本机卸下「${equippingItem.name}」的所选配置（尚未同步服务器）。`)
       setEquippingItem(null)
     } catch (error) {
-      setInventoryNotice(error instanceof Error ? error.message : String(error))
+      setEquipmentError(error instanceof Error ? error.message : String(error))
     } finally {
       setIsEquipmentSubmitting(false)
     }
@@ -963,7 +967,7 @@ function InventoryPage({ items, purchaseHistory, steamId, isAuthenticated, onReq
         </DialogContent>
       </Dialog>
 
-      <Dialog open={equippingItem !== null} onOpenChange={(open) => { if (!open) setEquippingItem(null) }}>
+      <Dialog open={equippingItem !== null} onOpenChange={(open) => { if (!open && !isEquipmentSubmitting) { setEquippingItem(null); setEquipmentError(null) } }}>
         <DialogContent>
           {equippingItem && (
             <>
@@ -972,6 +976,7 @@ function InventoryPage({ items, purchaseHistory, steamId, isAuthenticated, onReq
                 <div><div className="mb-2 flex items-center justify-between"><div className="text-sm font-medium">服务器模式</div><button type="button" className="text-xs text-primary hover:underline" onClick={() => { const allowedModes = equipmentModes.filter(([mode]) => productModeIsAllowed(equippingItem.mode, mode)).map(([mode]) => mode); setSelectedEquipmentModes(selectedEquipmentModes.length === allowedModes.length ? [] : allowedModes) }}>{selectedEquipmentModes.length === equipmentModes.filter(([mode]) => productModeIsAllowed(equippingItem.mode, mode)).length ? "清空" : "全选可用"}</button></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{equipmentModes.map(([mode, label]) => { const allowed = productModeIsAllowed(equippingItem.mode, mode); return <label key={mode} className={cn("flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors", allowed ? "cursor-pointer" : "cursor-not-allowed opacity-45", selectedEquipmentModes.includes(mode) ? "border-primary/40 bg-primary/10 text-foreground" : "border-border", allowed && "hover:bg-muted/40")}><input type="checkbox" className="size-4 accent-[var(--color-primary)]" disabled={!allowed} checked={selectedEquipmentModes.includes(mode)} onChange={() => toggleEquipmentMode(mode)} /><span>{label}</span></label> })}</div></div>
                 {equippingSlot === "player" ? <div><div className="mb-2 text-sm font-medium">阵营</div><div className="grid grid-cols-1 gap-2 sm:grid-cols-3"><Button type="button" variant={equipmentTeam === "all" ? "secondary" : "outline"} onClick={() => setEquipmentTeam("all")}>所有阵营</Button><Button type="button" variant={equipmentTeam === "ct" ? "secondary" : "outline"} onClick={() => setEquipmentTeam("ct")}>CT 反恐精英</Button><Button type="button" variant={equipmentTeam === "t" ? "secondary" : "outline"} onClick={() => setEquipmentTeam("t")}>T 恐怖分子</Button></div></div> : <div className="rounded-lg border border-secondary/20 bg-secondary/10 px-4 py-3 text-sm"><div className="font-medium">全阵营武器配置</div><div className="mt-1 text-xs text-muted-foreground">{equippingItem.weaponPrefab} · {equippingItem.weaponType}</div></div>}
                 <div className="rounded-lg border border-border bg-muted/25 px-4 py-3 text-sm"><div className="text-xs text-muted-foreground">将覆盖 {selectedConfigurationCount} 个配置</div><div className="mt-1 font-medium">{currentEquipmentNames.length > 0 ? `当前包含：${currentEquipmentNames.join("、")}` : "当前均未装备"}</div></div>
+                {equipmentError && <div role="alert" className="rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-300"><div className="font-medium">操作失败</div><div className="mt-1 text-xs leading-5">{equipmentError}</div></div>}
               </div>
               <DialogFooter><Button variant="ghost" disabled={isEquipmentSubmitting || !currentEquipmentIDs.includes(equippingItem.productId ?? 0)} onClick={() => void clearEquipment()}>卸下此物品</Button><DialogClose asChild><Button variant="outline" disabled={isEquipmentSubmitting}>取消</Button></DialogClose><Button disabled={isEquipmentSubmitting || selectedEquipmentModes.length === 0} onClick={() => void confirmEquipment()}>{isEquipmentSubmitting ? <RefreshCw className="animate-spin" /> : <Check />}{isEquipmentSubmitting ? "正在校验…" : "确认装备"}</Button></DialogFooter>
             </>
