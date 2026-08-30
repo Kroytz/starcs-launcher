@@ -20,6 +20,7 @@ import {
   Gem,
   Gift,
   Home,
+  Info,
   KeyRound,
   LogIn,
   Map,
@@ -739,8 +740,8 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
       onRequireLogin()
       return
     }
-    const backendName = item.purchaseBackend === "challenge-stardust" ? "DB_CHALLENGE 星尘商店" : "DB_STAR 星光商店"
-    setStoreNotice(`「${item.title}」将通过 ${backendName} 的独立购买流程处理；当前后端只读，购买暂未开放。`)
+    const backendName = item.purchaseBackend === "challenge-stardust" ? "星尘商店" : "星光商店"
+    setStoreNotice(`「${item.title}」在 ${backendName} 的购买暂未开放。`)
   }
 
   return (
@@ -815,7 +816,7 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
                 {!isAfdianItem && <Icon className="size-12 text-white/90" />}
               </div>
               <CardHeader><div className="flex items-center justify-between gap-2"><div className="flex min-w-0 gap-1"><Badge variant="secondary">{item.category || "其他"}</Badge>{item.tag && item.tag !== item.category && <Badge variant="outline" className={rarityBadgeClass(item.tag)}>{item.tag}</Badge>}</div><span className="flex items-center gap-1 font-semibold text-primary">{activeStore === "afdian" ? <>¥{item.price}</> : <>{activeStore === "starlight" ? <Sparkles className="size-3.5" /> : <Gem className="size-3.5" />}{item.price}</>}</span></div><CardTitle className="pt-3 text-base">{item.title}</CardTitle><CardDescription>{item.description}</CardDescription></CardHeader>
-              <CardContent><Button className="w-full" variant="outline" onClick={() => void purchase(item)}>{item.purchaseBackend === "afdian-cdk" ? "前往爱发电购买" : !isAuthenticated ? "登录后购买" : item.purchaseBackend === "challenge-stardust" ? "星尘购买（只读）" : "星光购买（只读）"}</Button></CardContent>
+              <CardContent><Button className="w-full" variant="outline" onClick={() => void purchase(item)}>{item.purchaseBackend === "afdian-cdk" ? "前往爱发电购买" : !isAuthenticated ? "登录后购买" : item.purchaseBackend === "challenge-stardust" ? "星尘购买" : "星光购买"}</Button></CardContent>
             </Card>
           )
         })}
@@ -944,7 +945,8 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
       return
     }
 
-    setInventoryNotice(`「${item.name}」来自真实库存；当前后端只读，使用物品暂未开放。`)
+    const detail = item.description.trim()
+    setInventoryNotice(detail ? `「${item.name}」${detail}` : `「${item.name}」暂未开放使用。`)
   }
 
   function toggleEquipmentMode(mode: string) {
@@ -1005,7 +1007,7 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
 
   return (
     <main className="page-shell inventory-page-shell">
-      <PageHeading eyebrow="我的库存" title={isAuthenticated ? "已拥有的物品" : "登录并解锁装备库"} description={isAuthenticated ? "展示当前账号可用的全部物品；装备配置会同步到 StarLightStore 的各模式游戏服务器。" : "连接当前 Steam 账号，立即查看真实库存并管理外观配置。"} action={isAuthenticated ? <div className="flex flex-col gap-2 sm:items-end"><Button variant="outline" onClick={() => setPurchaseHistoryOpen(true)}><ShoppingBag />最近购买 {purchaseHistory.length}</Button><Button variant="outline"><Boxes />全部物品 {inventory.length}</Button></div> : undefined} />
+      <PageHeading eyebrow="我的库存" title={isAuthenticated ? "已拥有的物品" : "登录并解锁装备库"} description={isAuthenticated ? "展示当前账号可用的全部物品；装备配置会同步到各模式游戏服务器。" : "连接当前 Steam 账号，立即查看真实库存并管理外观配置。"} action={isAuthenticated ? <div className="flex flex-col gap-2 sm:items-end"><Button variant="outline" onClick={() => setPurchaseHistoryOpen(true)}><ShoppingBag />最近购买 {purchaseHistory.length}</Button><Button variant="outline"><Boxes />全部物品 {inventory.length}</Button></div> : undefined} />
       {!isAuthenticated && <section className="grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)]" aria-label="登录后解锁库存">
         <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/[0.14] via-card to-secondary/[0.12]">
           <div className="pointer-events-none absolute -left-20 -top-24 size-72 rounded-full bg-primary/20 blur-3xl" />
@@ -1022,7 +1024,7 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
           <Card><CardContent className="flex min-h-[104px] items-center gap-4 p-5"><div className="grid size-11 shrink-0 place-items-center rounded-xl bg-accent/10 text-accent"><ShieldCheck /></div><div><CardTitle className="text-base">换着玩不打架</CardTitle><CardDescription className="mt-1 leading-5">不同玩法互不干扰，在这改完，服务器那边马上就好。</CardDescription></div></CardContent></Card>
         </div>
       </section>}
-      {isAuthenticated && inventoryNotice && <div className="mb-4 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm">{inventoryNotice}</div>}
+      {isAuthenticated && inventoryNotice && <div className="pointer-events-none fixed inset-x-0 top-[76px] z-30 flex justify-center px-4"><div className="pointer-events-auto flex max-w-xl items-start gap-3 rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm shadow-lg shadow-black/5 backdrop-blur-md"><Info className="mt-0.5 size-4 shrink-0 text-primary" /><span className="leading-5">{inventoryNotice}</span><button type="button" aria-label="关闭提示" className="mt-0.5 shrink-0 text-muted-foreground transition-colors hover:text-foreground" onClick={() => setInventoryNotice(null)}><X className="size-4" /></button></div></div>}
       {isAuthenticated && (isEquipmentLoading || equipmentUnavailableReason) && <div className="mb-4 flex flex-col justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><div><div className="font-medium text-amber-700 dark:text-amber-200">{isEquipmentLoading ? "正在同步游戏内装备配置" : "装备功能暂不可用"}</div><div className="mt-1 text-xs text-muted-foreground">{isEquipmentLoading ? "库存和其他登录功能可以正常使用。" : equipmentUnavailableReason}</div></div>{equipmentUnavailableReason && <Button variant="outline" size="sm" onClick={onRetryEquipment}><RefreshCw />重新读取</Button>}</div>}
       {isAuthenticated && !isEquipmentLoading && !equipmentUnavailableReason && unavailableModeEntries.length > 0 && <div className="mb-4 flex flex-col justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><div><div className="font-medium text-amber-700 dark:text-amber-200">部分模式的装备配置暂不可用</div><div className="mt-1 text-xs text-muted-foreground">暂不可用：{unavailableModeEntries.map(([mode]) => modeLabels[mode] ?? mode).join("、")}。其他模式可以正常配置。</div></div><Button variant="outline" size="sm" onClick={onRetryEquipment}><RefreshCw />重新读取</Button></div>}
       {isAuthenticated && <div className="inventory-grid">
@@ -1032,10 +1034,11 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
           const slot = getCosmeticSlot(item)
           const hasSelectableEquipmentMode = !slot || getSelectableEquipmentModes(item).length > 0
           const isEquipped = isStarLightItemEquipped(equipment, item)
+          const remainingLabel = formatRemainingTime(item.expiresAt)
           return (
             <Card key={item.id} className={cn("inventory-card overflow-hidden", item.quantity <= 0 && "opacity-60")} onContextMenu={(event) => openContextMenu(event, item)}>
               <div className={cn("relative grid aspect-[4/3] place-items-center bg-gradient-to-br", item.tone, rarityToneClass(item.rarity))}><div className="absolute right-2 top-2 flex items-center gap-1"><Badge variant="outline" className={cn("border-white/20 bg-black/35 text-white backdrop-blur-sm", rarityBadgeClass(item.rarity))}>{item.rarity}</Badge>{isEquipped && <Badge variant="success"><Check />已装备</Badge>}</div><Icon className="size-12 text-white/90" /></div>
-              <CardHeader><Badge variant="secondary" className="w-fit">{item.type}</Badge><CardTitle className="pt-3 text-base">{itemName}</CardTitle></CardHeader>
+              <CardHeader><Badge variant="secondary" className="w-fit">{item.type}</Badge><CardTitle className="pt-3 text-base">{itemName}</CardTitle><p className={cn("pt-1 text-xs", remainingLabel === "已过期" ? "text-red-600 dark:text-red-300" : "text-muted-foreground")}>{remainingLabel ? `剩余 ${remainingLabel}` : "永久有效"}</p></CardHeader>
               <CardContent><Button variant="secondary" className="w-full" disabled={isAuthenticated && (item.quantity <= 0 || Boolean(slot && (isEquipmentLoading || equipmentUnavailableReason || !hasSelectableEquipmentMode)))} onClick={() => handleInventoryAction(item)}>{!isAuthenticated ? "登录后操作" : slot && isEquipmentLoading ? "正在读取配置" : slot && (equipmentUnavailableReason || !hasSelectableEquipmentMode) ? "模式暂不可用" : slot ? "配置装备" : "使用物品"}</Button></CardContent>
             </Card>
           )
@@ -1083,6 +1086,22 @@ function formatLauncherDate(value: string) {
   if (!value) return "—"
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" })
+}
+
+// 只保留最大时间单位：1 天、3 小时、30 分钟……
+function formatRemainingTime(expiresAt: string) {
+  if (!expiresAt) return null
+  const expiry = new Date(expiresAt)
+  if (Number.isNaN(expiry.getTime())) return null
+  const remainingMs = expiry.getTime() - Date.now()
+  if (remainingMs <= 0) return "已过期"
+  const minutes = Math.floor(remainingMs / 60_000)
+  if (minutes < 1) return "不足 1 分钟"
+  const hours = Math.floor(minutes / 60)
+  if (hours < 1) return `${minutes} 分钟`
+  const days = Math.floor(hours / 24)
+  if (days < 1) return `${hours} 小时`
+  return `${days} 天`
 }
 
 function ProfilePage({ account, purchaseHistory, seasonPass, penalties, steamAccount, isAuthenticated, theme, onThemeChange, onLogin, onLogout }: { account: LauncherAccount | null; purchaseHistory: LauncherPurchaseHistoryItem[]; seasonPass: LauncherSeasonPass | null; penalties: LauncherPenalty[]; steamAccount: LocalSteamAccount | null; isAuthenticated: boolean; theme: ThemePreference; onThemeChange: (theme: ThemePreference) => void; onLogin: () => void; onLogout: () => void }) {

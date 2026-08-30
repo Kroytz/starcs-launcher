@@ -77,6 +77,8 @@ export type LauncherInventoryItem = {
   icon: string
   tone: string
   acquiredAt: string
+  expiresAt: string
+  description: string
   mode: string
   useLimit: number
   useLimitInfo: string

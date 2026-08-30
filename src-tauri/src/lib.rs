@@ -192,6 +192,10 @@ struct LauncherInventoryItem {
     tone: String,
     acquired_at: String,
     #[serde(default)]
+    expires_at: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
     mode: String,
     #[serde(default)]
     use_limit: i32,
