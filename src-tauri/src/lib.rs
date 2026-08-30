@@ -228,6 +228,19 @@ struct LauncherMapResource {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct LauncherWorkshopPack {
+    id: u64,
+    kind: String,
+    mode: String,
+    title: String,
+    description: String,
+    workshop_id: String,
+    workshop_url: String,
+    steam_url: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct LauncherPurchaseHistoryItem {
     id: u64,
     product_name: String,
@@ -399,6 +412,37 @@ async fn fetch_launcher_bootstrap() -> Result<LauncherBootstrap, String> {
 }
 
 #[tauri::command]
+async fn fetch_launcher_workshop_packs(
+    mode: String,
+) -> Result<Vec<LauncherWorkshopPack>, String> {
+    let backend_url = std::env::var("STAR_LAUNCHER_BACKEND_URL")
+        .unwrap_or_else(|_| DEFAULT_LAUNCHER_BACKEND_URL.to_string());
+    let request_url = format!(
+        "{}/api/v1/workshop-packs",
+        backend_url.trim_end_matches('/')
+    );
+    let response = reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .build()
+        .map_err(|error| format!("创建资源包请求客户端失败：{error}"))?
+        .get(&request_url)
+        .query(&[("mode", mode.trim().to_uppercase())])
+        .send()
+        .await
+        .map_err(|error| format!("连接资源包服务失败（{request_url}）：{error}"))?
+        .error_for_status()
+        .map_err(|error| format!("资源包服务返回 HTTP 错误：{error}"))?
+        .json::<ApiEnvelope<Vec<LauncherWorkshopPack>>>()
+        .await
+        .map_err(|error| format!("解析资源包数据失败：{error}"))?;
+
+    if response.code != 2000 {
+        return Err(format!("资源包接口错误：{}", response.msg));
+    }
+    Ok(response.data)
+}
+
+#[tauri::command]
 async fn login_launcher_account(
     steam_id: String,
     password: String,
@@ -543,6 +587,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             fetch_star_servers,
             fetch_launcher_bootstrap,
+            fetch_launcher_workshop_packs,
             login_launcher_account,
             verify_launcher_password,
             fetch_launcher_equipment,

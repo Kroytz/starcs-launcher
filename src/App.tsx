@@ -15,6 +15,7 @@ import {
   Coins,
   Eye,
   EyeOff,
+  ExternalLink,
   Gamepad2,
   Gem,
   Gift,
@@ -86,6 +87,7 @@ import {
 import {
   fetchLauncherBootstrap,
   fetchLauncherEquipment,
+  fetchLauncherWorkshopPacks,
   loginLauncherAccount,
   updateLauncherEquipment,
   type LauncherAccount,
@@ -97,6 +99,7 @@ import {
   type LauncherPurchaseHistoryItem,
   type LauncherSeasonPass,
   type LauncherStoreItem,
+  type LauncherWorkshopPack,
   type StarLightEquipmentProfile,
 } from "@/lib/launcher-api"
 import {
@@ -403,7 +406,10 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [joiningServerId, setJoiningServerId] = useState<string | null>(null)
-  const [joinError, setJoinError] = useState<string | null>(null)
+  const [resourceDialogServer, setResourceDialogServer] = useState<Server | null>(null)
+  const [resourcePacks, setResourcePacks] = useState<LauncherWorkshopPack[]>([])
+  const [isResourceLoading, setIsResourceLoading] = useState(false)
+  const [resourceDialogError, setResourceDialogError] = useState<string | null>(null)
   const initialFetchStarted = useRef(false)
 
   const loadServers = useCallback(async () => {
@@ -456,14 +462,43 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
     setFavorites((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
   }
 
+  async function loadResourcePacks(server: Server) {
+    setIsResourceLoading(true)
+    setResourceDialogError(null)
+    try {
+      setResourcePacks(await fetchLauncherWorkshopPacks(server.mode))
+    } catch (error) {
+      setResourcePacks([])
+      setResourceDialogError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setIsResourceLoading(false)
+    }
+  }
+
+  function prepareJoin(server: Server) {
+    setResourceDialogServer(server)
+    setResourcePacks([])
+    void loadResourcePacks(server)
+  }
+
+  async function openWorkshopPack(pack: LauncherWorkshopPack) {
+    setResourceDialogError(null)
+    try {
+      await openUrl(pack.steamUrl)
+    } catch (error) {
+      setResourceDialogError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
   async function joinServer(server: Server) {
     if (joiningServerId) return
     setJoiningServerId(server.id)
-    setJoinError(null)
+    setResourceDialogError(null)
     try {
       await launchAndConnectServer(server.address)
+      setResourceDialogServer(null)
     } catch (error) {
-      setJoinError(error instanceof Error ? error.message : String(error))
+      setResourceDialogError(error instanceof Error ? error.message : String(error))
     } finally {
       setJoiningServerId(null)
     }
@@ -559,9 +594,8 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
                 <div><Trophy className="mx-auto mb-1 size-4 text-muted-foreground" /><div className="text-sm font-medium">{selected.scoreCt}:{selected.scoreT}</div><div className="text-[10px] text-muted-foreground">CT / T</div></div>
               </div>
               <div className="mb-5 flex flex-wrap gap-2">{selected.tags.map((tag) => <Badge key={tag} variant="secondary">{tag}</Badge>)}</div>
-              <Button size="lg" className="w-full" disabled={!isServerJoinable(selected) || joiningServerId !== null} onClick={() => void joinServer(selected)}><Gamepad2 />{joiningServerId ? "正在启动并等待 CS2…" : isServerJoinable(selected) ? "加入服务器" : "服务器已满"}</Button>
+              <Button size="lg" className="w-full" disabled={!isServerJoinable(selected) || joiningServerId !== null} onClick={() => prepareJoin(selected)}><Gamepad2 />{joiningServerId ? "正在启动并等待 CS2…" : isServerJoinable(selected) ? "加入服务器" : "服务器已满"}</Button>
               <p className="mt-2 text-center text-[11px] text-muted-foreground">从登录器启动时将强制使用 -worldwide，并在 CS2 初始化完成后连接。</p>
-              {joinError && <div className="mt-3 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300">{joinError}</div>}
             </CardContent>
           </Card>
         ) : (
@@ -569,6 +603,36 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
         )}
       </aside>
       </div>
+      <Dialog open={resourceDialogServer !== null} onOpenChange={(open) => { if (!open && joiningServerId === null) setResourceDialogServer(null) }}>
+        <DialogContent className="sm:max-w-[600px]" showCloseButton={joiningServerId === null}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Package className="size-5 text-primary" />启动前准备资源</DialogTitle>
+            <DialogDescription>建议先订阅基础资源包和当前模式资源包，Steam 会在后台保持资源更新；订阅不是进入服务器的强制条件。</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            {isResourceLoading && <>{[0, 1].map((item) => <div key={item} className="flex items-center gap-3 rounded-xl border border-border p-4"><Skeleton className="size-10 rounded-lg" /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-36" /><Skeleton className="h-3 w-56" /></div><Skeleton className="h-9 w-28" /></div>)}</>}
+            {!isResourceLoading && resourcePacks.map((pack) => (
+              <div key={pack.id} className="flex flex-col gap-3 rounded-xl border border-border bg-muted/20 p-4 sm:flex-row sm:items-center">
+                <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Package className="size-5" /></div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2"><span className="font-medium">{pack.title}</span><Badge variant={pack.kind === "base" ? "secondary" : "outline"}>{pack.kind === "base" ? "基础资源" : `${modeLabels[pack.mode] ?? pack.mode}模式`}</Badge></div>
+                  <p className="mt-1 text-xs text-muted-foreground">{pack.description || `Workshop ${pack.workshopId}`}</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => void openWorkshopPack(pack)}><ExternalLink />Steam 打开</Button>
+              </div>
+            ))}
+            {!isResourceLoading && resourcePacks.length === 0 && !resourceDialogError && <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">当前模式暂未配置资源包，可直接启动游戏。</div>}
+            {resourceDialogError && <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300">{resourceDialogError}</div>}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" disabled={joiningServerId !== null} onClick={() => setResourceDialogServer(null)}>稍后再说</Button>
+            {resourceDialogError && resourcePacks.length === 0 && resourceDialogServer && !joiningServerId && <Button variant="outline" disabled={isResourceLoading} onClick={() => void loadResourcePacks(resourceDialogServer)}><RefreshCw className={cn(isResourceLoading && "animate-spin")} />重试加载</Button>}
+            <Button disabled={!resourceDialogServer || joiningServerId !== null} onClick={() => resourceDialogServer && void joinServer(resourceDialogServer)}><Gamepad2 />{joiningServerId ? "正在启动并等待 CS2…" : "继续启动"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <AnnouncementDetailDialog announcement={selectedAnnouncement} onOpenChange={(open) => { if (!open) setSelectedAnnouncement(null) }} />
     </main>
   )

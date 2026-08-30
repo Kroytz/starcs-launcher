@@ -14,6 +14,7 @@
       "identifier": "opener:allow-open-url",
       "allow": [
         { "url": "steam://connect/*" },
+        { "url": "steam://openurl/*" },
         { "url": "https://www.ifdian.net/item/*" }
       ]
     }

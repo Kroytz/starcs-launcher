@@ -147,6 +147,17 @@ export type LauncherMapResource = {
   description: string
 }
 
+export type LauncherWorkshopPack = {
+  id: number
+  kind: "base" | "mode"
+  mode: string
+  title: string
+  description: string
+  workshopId: string
+  workshopUrl: string
+  steamUrl: string
+}
+
 export type LauncherPurchaseHistoryItem = {
   id: number
   productName: string
@@ -198,6 +209,10 @@ export type LauncherBootstrap = {
 
 export async function fetchLauncherBootstrap() {
   return invoke<LauncherBootstrap>("fetch_launcher_bootstrap")
+}
+
+export async function fetchLauncherWorkshopPacks(mode: string) {
+  return invoke<LauncherWorkshopPack[]>("fetch_launcher_workshop_packs", { mode })
 }
 
 export async function loginLauncherAccount(steamId: string, password: string) {
