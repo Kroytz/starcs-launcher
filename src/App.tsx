@@ -129,6 +129,7 @@ const displayIcons: Record<string, LucideIcon> = {
   "shield-check": ShieldCheck,
   sparkles: Sparkles,
   star: Star,
+  "shopping-bag": ShoppingBag,
   trophy: Trophy,
   "user-round": UserRound,
   zap: Zap,
@@ -167,6 +168,23 @@ function rarityToneClass(rarity: string) {
       return "from-cyan-400 to-blue-600"
     default:
       return ""
+  }
+}
+
+function afdianCategoryTone(category: string) {
+  switch (category) {
+    case "会员":
+      return "from-amber-500 to-orange-600"
+    case "星光":
+      return "from-sky-500 to-indigo-600"
+    case "武器外观":
+      return "from-slate-700 to-red-600"
+    case "礼包":
+      return "from-pink-500 to-rose-600"
+    case "道具卡":
+      return "from-violet-500 to-fuchsia-600"
+    default:
+      return "from-cyan-500 to-blue-600"
   }
 }
 
@@ -652,7 +670,7 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
           <Button variant={activeStore === "starlight" ? "secondary" : "ghost"} onClick={() => setActiveStore("starlight")}><Sparkles />星光商店</Button>
           <Button variant={activeStore === "stardust" ? "secondary" : "ghost"} onClick={() => setActiveStore("stardust")}><Gem />星尘商店</Button>
         </div>
-        <div className="text-sm text-muted-foreground">{activeStore === "afdian" ? <span>人民币定价 · <span className="font-semibold text-foreground">在系统浏览器完成购买</span></span> : <>当前余额：<span className="font-semibold text-foreground">{!isAuthenticated ? "登录后查看" : activeBalanceAvailable ? `${activeBalance.toLocaleString()} ${activeStore === "starlight" ? "星光" : "星尘"}` : "当前数据库暂无数据"}</span></>}</div>
+        {activeStore !== "afdian" && <div className="text-sm text-muted-foreground">当前余额：<span className="font-semibold text-foreground">{!isAuthenticated ? "登录后查看" : activeBalanceAvailable ? `${activeBalance.toLocaleString()} ${activeStore === "starlight" ? "星光" : "星尘"}` : "当前数据库暂无数据"}</span></div>}
       </div>
 
       <div className="relative mt-4">
@@ -670,9 +688,14 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
       <div className="store-grid mt-4">
         {activeItems.map((item) => {
           const Icon = displayIcons[item.icon] ?? Package
+          const isAfdianItem = item.purchaseBackend === "afdian-cdk"
           return (
             <Card key={item.id} className="store-card overflow-hidden">
-              <div className={cn("relative grid h-32 place-items-center overflow-hidden bg-gradient-to-br", item.tone, rarityToneClass(item.tag))}>{item.imageUrl ? <img src={item.imageUrl} alt="" className="absolute inset-0 size-full object-cover" onError={(event) => { event.currentTarget.style.display = "none" }} /> : null}<Icon className="size-12 text-white/90" /></div>
+              <div className={cn("relative grid h-32 place-items-center overflow-hidden bg-gradient-to-br", item.tone, isAfdianItem ? afdianCategoryTone(item.category) : rarityToneClass(item.tag))}>
+                {isAfdianItem && <><div className="absolute -right-5 -top-8 size-24 rounded-full bg-white/20 blur-2xl" /><div className="absolute -bottom-10 -left-6 size-24 rounded-full bg-black/20 blur-xl" /><div className="absolute inset-x-4 bottom-3 flex items-center justify-between text-[9px] font-semibold uppercase tracking-[0.16em] text-white/65"><span>STARCS</span><span>{item.category || "其他"}</span></div><div className="relative grid size-16 place-items-center rounded-2xl border border-white/25 bg-white/15 shadow-xl backdrop-blur-sm"><Icon className="size-8 text-white" /></div></>}
+                {item.imageUrl ? <img src={item.imageUrl} alt="" className="absolute inset-0 size-full object-cover" onError={(event) => { event.currentTarget.style.display = "none" }} /> : null}
+                {!isAfdianItem && <Icon className="size-12 text-white/90" />}
+              </div>
               <CardHeader><div className="flex items-center justify-between gap-2"><div className="flex min-w-0 gap-1"><Badge variant="secondary">{item.category || "其他"}</Badge>{item.tag && item.tag !== item.category && <Badge variant="outline" className={rarityBadgeClass(item.tag)}>{item.tag}</Badge>}</div><span className="flex items-center gap-1 font-semibold text-primary">{activeStore === "afdian" ? <>¥{item.price}</> : <>{activeStore === "starlight" ? <Sparkles className="size-3.5" /> : <Gem className="size-3.5" />}{item.price}</>}</span></div><CardTitle className="pt-3 text-base">{item.title}</CardTitle><CardDescription>{item.description}</CardDescription></CardHeader>
               <CardContent><Button className="w-full" variant="outline" onClick={() => void purchase(item)}>{!isAuthenticated ? "登录后购买" : item.purchaseBackend === "afdian-cdk" ? "前往爱发电购买" : item.purchaseBackend === "challenge-stardust" ? "星尘购买（只读）" : "星光购买（只读）"}</Button></CardContent>
             </Card>
