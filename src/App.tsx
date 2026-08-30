@@ -57,6 +57,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
+import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import {
   applyTheme,
@@ -351,6 +352,24 @@ function AnnouncementCenter({ announcements, isLoading, onSelect }: { announceme
   function move(direction: -1 | 1) {
     if (slides.length < 2) return
     setActiveIndex((current) => (current + direction + slides.length) % slides.length)
+  }
+
+  if (isLoading && announcements.length === 0) {
+    return (
+      <section className="grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]" aria-label="正在加载社区公告" aria-busy="true">
+        <Card className="relative h-[200px] overflow-hidden p-5">
+          <Skeleton className="absolute inset-0 rounded-none bg-muted/70" />
+          <div className="relative flex h-full flex-col justify-between">
+            <div className="flex items-center justify-between"><Skeleton className="h-6 w-20 bg-background/55" /><Skeleton className="h-3 w-16 bg-background/45" /></div>
+            <div className="space-y-3"><Skeleton className="h-6 w-2/3 bg-background/55" /><Skeleton className="h-4 w-5/6 bg-background/45" /><Skeleton className="h-3 w-20 bg-background/45" /></div>
+          </div>
+        </Card>
+        <Card className="h-[200px] overflow-hidden p-4">
+          <div className="mb-4 flex items-start justify-between"><div className="space-y-2"><Skeleton className="h-5 w-20" /><Skeleton className="h-3 w-36" /></div><Skeleton className="size-8 rounded-lg" /></div>
+          <div className="space-y-3">{Array.from({ length: 3 }, (_, index) => <div key={index} className="flex items-center gap-3"><Skeleton className="size-7 shrink-0 rounded-lg" /><Skeleton className="h-4 flex-1" /><Skeleton className="h-3 w-12" /></div>)}</div>
+        </Card>
+      </section>
+    )
   }
 
   return (
@@ -725,14 +744,35 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
 }
 
 function BackendDataPage({ isLoading, error, onRetry }: { isLoading: boolean; error: string | null; onRetry: () => void }) {
+  if (isLoading) {
+    return (
+      <main className="page-shell" aria-label="正在同步登录器数据" aria-busy="true">
+        <div className="mb-8 space-y-3">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-9 w-72 max-w-[72vw]" />
+          <Skeleton className="h-4 w-[430px] max-w-[88vw]" />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }, (_, index) => (
+            <Card key={index} className="overflow-hidden">
+              <Skeleton className="h-32 w-full rounded-none" />
+              <CardHeader className="space-y-3"><div className="flex items-center justify-between gap-4"><Skeleton className="h-5 w-16" /><Skeleton className="h-4 w-12" /></div><Skeleton className="h-5 w-3/4" /><Skeleton className="h-4 w-full" /></CardHeader>
+              <CardContent><Skeleton className="h-9 w-full" /></CardContent>
+            </Card>
+          ))}
+        </div>
+      </main>
+    )
+  }
+
   return (
     <main className="page-shell">
-      <PageHeading eyebrow="STAR 服务" title={isLoading ? "正在同步登录器数据" : "暂时无法读取展示数据"} description={isLoading ? "正在从本地 Go 后端获取商城、库存与个人资料。" : "请确认 star-launcher-backend 已经启动。"} />
+      <PageHeading eyebrow="STAR 服务" title="暂时无法读取展示数据" description="请确认 star-launcher-backend 已经启动。" />
       <Card>
         <CardContent className="flex flex-col items-center py-16 text-center">
-          <RefreshCw className={cn("mb-4 size-8 text-primary", isLoading && "animate-spin")} />
-          <p className="max-w-xl text-sm text-muted-foreground">{isLoading ? "连接 http://127.0.0.1:8080…" : error}</p>
-          {!isLoading && <Button variant="outline" className="mt-5" onClick={onRetry}><RefreshCw />重新获取</Button>}
+          <RefreshCw className="mb-4 size-8 text-primary" />
+          <p className="max-w-xl text-sm text-muted-foreground">{error}</p>
+          <Button variant="outline" className="mt-5" onClick={onRetry}><RefreshCw />重新获取</Button>
         </CardContent>
       </Card>
     </main>
