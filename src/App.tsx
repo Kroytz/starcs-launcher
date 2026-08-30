@@ -110,6 +110,11 @@ import {
 } from "@/lib/steam"
 import "./App.css"
 
+function presentError(context: string, error: unknown, message: string) {
+  console.error(`[StarCS Launcher] ${context}`, error)
+  return message
+}
+
 type AppTab = "home" | "store" | "inventory" | "profile"
 type ServerSort = "players" | "mode"
 
@@ -424,7 +429,7 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
           : ([...nextServers].sort((a, b) => b.players - a.players)[0]?.id ?? ""),
       )
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : String(error))
+      setLoadError(presentError("获取服务器列表失败", error, "服务器列表暂时无法获取，请稍后重试。"))
     } finally {
       setIsLoading(false)
     }
@@ -469,7 +474,7 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
       setResourcePacks(await fetchLauncherWorkshopPacks(server.mode))
     } catch (error) {
       setResourcePacks([])
-      setResourceDialogError(error instanceof Error ? error.message : String(error))
+      setResourceDialogError(presentError("读取创意工坊资源包失败", error, "资源包列表暂时无法获取，可重试或直接启动游戏。"))
     } finally {
       setIsResourceLoading(false)
     }
@@ -486,7 +491,7 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
     try {
       await openUrl(pack.steamUrl)
     } catch (error) {
-      setResourceDialogError(error instanceof Error ? error.message : String(error))
+      setResourceDialogError(presentError("通过 Steam 打开资源包失败", error, "无法通过 Steam 打开资源链接，请确认 Steam 正在运行。"))
     }
   }
 
@@ -498,7 +503,7 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
       await launchAndConnectServer(server.address)
       setResourceDialogServer(null)
     } catch (error) {
-      setResourceDialogError(error instanceof Error ? error.message : String(error))
+      setResourceDialogError(presentError("启动或连接 CS2 失败", error, "游戏启动或连接请求未能完成，请稍后重试。"))
     } finally {
       setJoiningServerId(null)
     }
@@ -713,7 +718,7 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
       try {
         await openUrl(item.purchaseUrl)
       } catch (error) {
-        setStoreNotice(`无法打开爱发电购买页：${error instanceof Error ? error.message : String(error)}`)
+        setStoreNotice(presentError("打开爱发电购买页失败", error, "暂时无法打开购买页面，请稍后重试。"))
       }
       return
     }
@@ -904,7 +909,8 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
       }
       const validationError = getEquipmentValidationError(item)
       if (validationError) {
-        setInventoryNotice(`「${item.name}」无法配置：${validationError}`)
+        console.warn(`[StarCS Launcher] 「${item.name}」装备校验失败：${validationError}`)
+        setInventoryNotice(`「${item.name}」的装备数据不完整，暂时无法配置。`)
         return
       }
       const allowedModes = getSelectableEquipmentModes(item)
@@ -952,7 +958,7 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
       setInventoryNotice(`已将「${equippingItem.name}」同步到游戏内配置：${selectedEquipmentModes.length} 个模式 · ${teamLabel}。`)
       setEquippingItem(null)
     } catch (error) {
-      setEquipmentError(error instanceof Error ? error.message : String(error))
+      setEquipmentError(presentError("装备物品失败", error, "装备同步未能完成，请稍后重试。"))
     } finally {
       setIsEquipmentSubmitting(false)
     }
@@ -970,7 +976,7 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
       setInventoryNotice(`已从游戏内配置卸下「${equippingItem.name}」的所选模式。`)
       setEquippingItem(null)
     } catch (error) {
-      setEquipmentError(error instanceof Error ? error.message : String(error))
+      setEquipmentError(presentError("卸下物品失败", error, "卸下操作未能完成，请稍后重试。"))
     } finally {
       setIsEquipmentSubmitting(false)
     }
@@ -1005,7 +1011,7 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
       </section>}
       {isAuthenticated && inventoryNotice && <div className="mb-4 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm">{inventoryNotice}</div>}
       {isAuthenticated && (isEquipmentLoading || equipmentUnavailableReason) && <div className="mb-4 flex flex-col justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><div><div className="font-medium text-amber-700 dark:text-amber-200">{isEquipmentLoading ? "正在同步游戏内装备配置" : "装备功能暂不可用"}</div><div className="mt-1 text-xs text-muted-foreground">{isEquipmentLoading ? "库存和其他登录功能可以正常使用。" : equipmentUnavailableReason}</div></div>{equipmentUnavailableReason && <Button variant="outline" size="sm" onClick={onRetryEquipment}><RefreshCw />重新读取</Button>}</div>}
-      {isAuthenticated && !isEquipmentLoading && !equipmentUnavailableReason && unavailableModeEntries.length > 0 && <div className="mb-4 flex flex-col justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><div><div className="font-medium text-amber-700 dark:text-amber-200">部分模式的装备配置暂不可用</div><div className="mt-1 text-xs text-muted-foreground">{unavailableModeEntries.map(([mode, reason]) => `${modeLabels[mode] ?? mode}：${reason}`).join("；")}</div></div><Button variant="outline" size="sm" onClick={onRetryEquipment}><RefreshCw />重新读取</Button></div>}
+      {isAuthenticated && !isEquipmentLoading && !equipmentUnavailableReason && unavailableModeEntries.length > 0 && <div className="mb-4 flex flex-col justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><div><div className="font-medium text-amber-700 dark:text-amber-200">部分模式的装备配置暂不可用</div><div className="mt-1 text-xs text-muted-foreground">暂不可用：{unavailableModeEntries.map(([mode]) => modeLabels[mode] ?? mode).join("、")}。其他模式可以正常配置。</div></div><Button variant="outline" size="sm" onClick={onRetryEquipment}><RefreshCw />重新读取</Button></div>}
       {isAuthenticated && <div className="inventory-grid">
         {inventory.map((item) => {
           const Icon = displayIcons[item.icon] ?? Package
@@ -1046,7 +1052,7 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
             <>
               <DialogHeader><DialogTitle>配置「{equippingItem.name}」</DialogTitle><DialogDescription>{equippingSlot === "weapon" ? "勾选一个或多个模式；武器外观会按 StarLightStore 的武器类型与 prefab 配置，并对两个阵营生效。" : "勾选一个或多个模式，并为所有阵营或指定阵营装备角色外观。"}</DialogDescription></DialogHeader>
               <div className="space-y-5">
-                <div><div className="mb-2 flex items-center justify-between"><div className="text-sm font-medium">服务器模式</div><button type="button" className="text-xs text-primary hover:underline" onClick={() => setSelectedEquipmentModes(selectedEquipmentModes.length === selectableEquipmentModes.length ? [] : selectableEquipmentModes)}>{selectedEquipmentModes.length === selectableEquipmentModes.length ? "清空" : "全选可用"}</button></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{equipmentModes.map(([mode, label]) => { const unavailableReason = equipment.unavailableModes?.[mode]; const allowed = productModeIsAllowed(equippingItem.mode, mode) && !unavailableReason; return <label key={mode} title={unavailableReason || undefined} className={cn("flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors", allowed ? "cursor-pointer" : "cursor-not-allowed opacity-45", selectedEquipmentModes.includes(mode) ? "border-primary/40 bg-primary/10 text-foreground" : "border-border", allowed && "hover:bg-muted/40")}><input type="checkbox" className="size-4 accent-[var(--color-primary)]" disabled={!allowed} checked={selectedEquipmentModes.includes(mode)} onChange={() => toggleEquipmentMode(mode)} /><span>{label}{unavailableReason && <span className="ml-1 text-[10px] text-amber-600 dark:text-amber-300">不可用</span>}</span></label> })}</div></div>
+                <div><div className="mb-2 flex items-center justify-between"><div className="text-sm font-medium">服务器模式</div><button type="button" className="text-xs text-primary hover:underline" onClick={() => setSelectedEquipmentModes(selectedEquipmentModes.length === selectableEquipmentModes.length ? [] : selectableEquipmentModes)}>{selectedEquipmentModes.length === selectableEquipmentModes.length ? "清空" : "全选可用"}</button></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{equipmentModes.map(([mode, label]) => { const unavailableReason = equipment.unavailableModes?.[mode]; const allowed = productModeIsAllowed(equippingItem.mode, mode) && !unavailableReason; return <label key={mode} title={unavailableReason ? "该模式的装备配置暂不可用" : undefined} className={cn("flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors", allowed ? "cursor-pointer" : "cursor-not-allowed opacity-45", selectedEquipmentModes.includes(mode) ? "border-primary/40 bg-primary/10 text-foreground" : "border-border", allowed && "hover:bg-muted/40")}><input type="checkbox" className="size-4 accent-[var(--color-primary)]" disabled={!allowed} checked={selectedEquipmentModes.includes(mode)} onChange={() => toggleEquipmentMode(mode)} /><span>{label}{unavailableReason && <span className="ml-1 text-[10px] text-amber-600 dark:text-amber-300">不可用</span>}</span></label> })}</div></div>
                 {equippingSlot === "player" ? <div><div className="mb-2 text-sm font-medium">阵营</div><div className="grid grid-cols-1 gap-2 sm:grid-cols-3"><Button type="button" variant={equipmentTeam === "all" ? "secondary" : "outline"} onClick={() => setEquipmentTeam("all")}>所有阵营</Button><Button type="button" variant={equipmentTeam === "ct" ? "secondary" : "outline"} onClick={() => setEquipmentTeam("ct")}>CT 反恐精英</Button><Button type="button" variant={equipmentTeam === "t" ? "secondary" : "outline"} onClick={() => setEquipmentTeam("t")}>T 恐怖分子</Button></div></div> : <div className="rounded-lg border border-secondary/20 bg-secondary/10 px-4 py-3 text-sm"><div className="font-medium">全阵营武器配置</div><div className="mt-1 text-xs text-muted-foreground">{equippingItem.weaponPrefab} · {equippingItem.weaponType}</div></div>}
                 <div className="rounded-lg border border-border bg-muted/25 px-4 py-3 text-sm"><div className="text-xs text-muted-foreground">将覆盖 {selectedConfigurationCount} 个配置</div><div className="mt-1 font-medium">{currentEquipmentNames.length > 0 ? `当前包含：${currentEquipmentNames.join("、")}` : "当前均未装备"}</div></div>
                 {equipmentError && <div role="alert" className="rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-300"><div className="font-medium">操作失败</div><div className="mt-1 text-xs leading-5">{equipmentError}</div></div>}
@@ -1155,7 +1161,7 @@ function App() {
       setRememberPassword(Boolean(remembered))
     } catch (error) {
       setSteamAccount(null)
-      setSteamAccountError(error instanceof Error ? error.message : String(error))
+      setSteamAccountError(presentError("读取本机 Steam Session 失败", error, "暂时无法读取本机 Steam 登录信息，请确认 Steam 已安装并正在运行。"))
     } finally {
       setIsSteamAccountLoading(false)
     }
@@ -1167,7 +1173,7 @@ function App() {
     try {
       setBootstrap(await fetchLauncherBootstrap())
     } catch (error) {
-      setBootstrapError(error instanceof Error ? error.message : String(error))
+      setBootstrapError(presentError("读取登录器基础数据失败", error, "暂时无法连接登录器服务，请稍后重试。"))
     } finally {
       setIsBootstrapLoading(false)
     }
@@ -1227,7 +1233,7 @@ function App() {
       setLoginOpen(false)
       void loadAuthenticatedEquipment(session.token, password)
     } catch (error) {
-      setLoginError(error instanceof Error ? error.message : String(error))
+      setLoginError(presentError("账号登录失败", error, "登录失败，请检查游戏内密码后重试。"))
     } finally {
       setIsLoginSubmitting(false)
     }
@@ -1275,11 +1281,22 @@ function App() {
       if (!result.equipment) {
         throw new Error("后端未返回游戏内装备配置。")
       }
+      const unavailableModes = result.equipment.unavailableModes ?? {}
+      const unavailableEntries = Object.entries(unavailableModes)
+      if (unavailableEntries.length > 0) {
+        console.warn("[StarCS Launcher] 部分模式装备配置读取失败", unavailableModes)
+      }
+      const allModesUnavailable = Object.keys(modeLabels).every((mode) => Boolean(unavailableModes[mode]))
+      if (allModesUnavailable) {
+        setAuthenticatedEquipment(null)
+        setEquipmentUnavailableReason("装备配置服务暂时不可用，请稍后重新读取。")
+        return
+      }
       setAuthenticatedEquipment(result.equipment)
     } catch (error) {
       if (activeAuthToken.current === token) {
         setAuthenticatedEquipment(null)
-        setEquipmentUnavailableReason(error instanceof Error ? error.message : String(error))
+        setEquipmentUnavailableReason(presentError("读取游戏内装备配置失败", error, "装备配置服务暂时不可用，请稍后重新读取。"))
       }
     } finally {
       if (activeAuthToken.current === token) setIsEquipmentLoading(false)
