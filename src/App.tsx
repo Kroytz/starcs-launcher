@@ -152,6 +152,24 @@ function rarityBadgeClass(rarity: string) {
   }
 }
 
+function rarityToneClass(rarity: string) {
+  switch (rarity.trim().toUpperCase()) {
+    case "R":
+      return "from-emerald-500 to-cyan-500"
+    case "SR":
+      return "from-primary to-secondary"
+    case "SSR":
+      return "from-violet-500 to-fuchsia-600"
+    case "UR":
+      return "from-amber-400 to-orange-600"
+    case "CRYSTAL":
+    case "水晶":
+      return "from-cyan-400 to-blue-600"
+    default:
+      return ""
+  }
+}
+
 function ServerModeIcon({ server, large = false }: { server: Server; large?: boolean }) {
   const icon = modeIcons[server.mode.toUpperCase()]
   const className = cn("server-mode-icon", large && "server-mode-icon-large")
@@ -654,7 +672,7 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
           const Icon = displayIcons[item.icon] ?? Package
           return (
             <Card key={item.id} className="store-card overflow-hidden">
-              <div className={cn("relative grid h-32 place-items-center overflow-hidden bg-gradient-to-br", item.tone)}>{item.imageUrl ? <img src={item.imageUrl} alt="" className="absolute inset-0 size-full object-cover" onError={(event) => { event.currentTarget.style.display = "none" }} /> : null}<Icon className="size-12 text-white/90" /></div>
+              <div className={cn("relative grid h-32 place-items-center overflow-hidden bg-gradient-to-br", item.tone, rarityToneClass(item.tag))}>{item.imageUrl ? <img src={item.imageUrl} alt="" className="absolute inset-0 size-full object-cover" onError={(event) => { event.currentTarget.style.display = "none" }} /> : null}<Icon className="size-12 text-white/90" /></div>
               <CardHeader><div className="flex items-center justify-between gap-2"><div className="flex min-w-0 gap-1"><Badge variant="secondary">{item.category || "其他"}</Badge>{item.tag && item.tag !== item.category && <Badge variant="outline" className={rarityBadgeClass(item.tag)}>{item.tag}</Badge>}</div><span className="flex items-center gap-1 font-semibold text-primary">{activeStore === "afdian" ? <>¥{item.price}</> : <>{activeStore === "starlight" ? <Sparkles className="size-3.5" /> : <Gem className="size-3.5" />}{item.price}</>}</span></div><CardTitle className="pt-3 text-base">{item.title}</CardTitle><CardDescription>{item.description}</CardDescription></CardHeader>
               <CardContent><Button className="w-full" variant="outline" onClick={() => void purchase(item)}>{!isAuthenticated ? "登录后购买" : item.purchaseBackend === "afdian-cdk" ? "前往爱发电购买" : item.purchaseBackend === "challenge-stardust" ? "星尘购买（只读）" : "星光购买（只读）"}</Button></CardContent>
             </Card>
@@ -835,7 +853,7 @@ function InventoryPage({ items, isAuthenticated, onRequireLogin }: { items: Laun
           const isEquipped = Object.values(equipment).includes(item.id)
           return (
             <Card key={item.id} className={cn("inventory-card overflow-hidden", item.quantity <= 0 && "opacity-60")} onContextMenu={(event) => openContextMenu(event, item)}>
-              <div className={cn("relative grid aspect-[4/3] place-items-center bg-gradient-to-br", item.tone)}><div className="absolute right-2 top-2 flex items-center gap-1"><Badge variant="outline" className={cn("border-white/20 bg-black/35 text-white backdrop-blur-sm", rarityBadgeClass(item.rarity))}>{item.rarity}</Badge>{isEquipped && <Badge variant="success"><Check />已装备</Badge>}</div><Icon className="size-12 text-white/90" /></div>
+              <div className={cn("relative grid aspect-[4/3] place-items-center bg-gradient-to-br", item.tone, rarityToneClass(item.rarity))}><div className="absolute right-2 top-2 flex items-center gap-1"><Badge variant="outline" className={cn("border-white/20 bg-black/35 text-white backdrop-blur-sm", rarityBadgeClass(item.rarity))}>{item.rarity}</Badge>{isEquipped && <Badge variant="success"><Check />已装备</Badge>}</div><Icon className="size-12 text-white/90" /></div>
               <CardHeader><Badge variant="secondary" className="w-fit">{item.type}</Badge><CardTitle className="pt-3 text-base">{itemName}</CardTitle></CardHeader>
               <CardContent><Button variant="secondary" className="w-full" disabled={isAuthenticated && item.quantity <= 0} onClick={() => handleInventoryAction(item)}>{!isAuthenticated ? "登录后操作" : slot ? "配置装备" : "使用物品"}</Button></CardContent>
             </Card>
