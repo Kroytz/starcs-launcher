@@ -67,6 +67,18 @@ import {
   type ThemePreference,
 } from "@/lib/theme"
 import {
+  equipStarLightItem,
+  getConfiguredProductIds,
+  getCosmeticSlot,
+  getEquipmentValidationError,
+  isStarLightItemEquipped,
+  loadStarLightEquipment,
+  productModeIsAllowed,
+  saveStarLightEquipment,
+  unequipStarLightItem,
+  type EquipmentTargetTeam,
+} from "@/lib/starlight-equipment"
+import {
   fetchStarServers,
   isServerJoinable,
   launchAndConnectServer,
@@ -727,41 +739,16 @@ function BackendDataPage({ isLoading, error, onRetry }: { isLoading: boolean; er
   )
 }
 
-type EquipmentTeam = "ct" | "t"
-type EquipmentTargetTeam = EquipmentTeam | "all"
-type CosmeticSlot = "weapon" | "player"
-type EquipmentAssignments = Record<string, string>
+const equipmentModes = Object.entries(modeLabels)
 
-const equipmentModes = Object.entries(modeLabels).filter(([mode]) => mode !== "AFK")
-const equipmentStorageKey = "star-launcher-equipment"
-
-function getCosmeticSlot(item: LauncherInventoryItem): CosmeticSlot | null {
-  if (item.type === "武器外观") return "weapon"
-  if (item.type === "角色外观" || item.type === "玩家外观") return "player"
-  return null
-}
-
-function getEquipmentKey(mode: string, team: EquipmentTeam, slot: CosmeticSlot) {
-  return `${mode}:${team}:${slot}`
-}
-
-function getSavedEquipment(): EquipmentAssignments {
-  try {
-    const saved = localStorage.getItem(equipmentStorageKey)
-    return saved ? JSON.parse(saved) as EquipmentAssignments : {}
-  } catch {
-    return {}
-  }
-}
-
-function InventoryPage({ items, purchaseHistory, isAuthenticated, onRequireLogin }: { items: LauncherInventoryItem[]; purchaseHistory: LauncherPurchaseHistoryItem[]; isAuthenticated: boolean; onRequireLogin: () => void }) {
+function InventoryPage({ items, purchaseHistory, steamId, isAuthenticated, onRequireLogin }: { items: LauncherInventoryItem[]; purchaseHistory: LauncherPurchaseHistoryItem[]; steamId: string; isAuthenticated: boolean; onRequireLogin: () => void }) {
   const [inventory, setInventory] = useState(items)
   const [purchaseHistoryOpen, setPurchaseHistoryOpen] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ itemId: string; x: number; y: number } | null>(null)
   const [equippingItem, setEquippingItem] = useState<LauncherInventoryItem | null>(null)
-  const [selectedEquipmentModes, setSelectedEquipmentModes] = useState<string[]>([equipmentModes[0]?.[0] ?? "ZM"])
+  const [selectedEquipmentModes, setSelectedEquipmentModes] = useState<string[]>(["ZM"])
   const [equipmentTeam, setEquipmentTeam] = useState<EquipmentTargetTeam>("all")
-  const [equipment, setEquipment] = useState<EquipmentAssignments>(getSavedEquipment)
+  const [equipment, setEquipment] = useState(() => loadStarLightEquipment(steamId, items))
   const [inventoryNotice, setInventoryNotice] = useState<string | null>(null)
 
   useEffect(() => {
@@ -769,8 +756,8 @@ function InventoryPage({ items, purchaseHistory, isAuthenticated, onRequireLogin
   }, [items])
 
   useEffect(() => {
-    localStorage.setItem(equipmentStorageKey, JSON.stringify(equipment))
-  }, [equipment])
+    saveStarLightEquipment(steamId, equipment)
+  }, [equipment, steamId])
 
   useEffect(() => {
     const closeMenu = () => setContextMenu(null)
@@ -811,6 +798,20 @@ function InventoryPage({ items, purchaseHistory, isAuthenticated, onRequireLogin
     const slot = getCosmeticSlot(item)
     setContextMenu(null)
     if (slot) {
+      const validationError = getEquipmentValidationError(item)
+      if (validationError) {
+        setInventoryNotice(`「${item.name}」无法配置：${validationError}`)
+        return
+      }
+      const allowedModes = equipmentModes.filter(([mode]) => productModeIsAllowed(item.mode, mode)).map(([mode]) => mode)
+      if (allowedModes.length === 0) {
+        setInventoryNotice(`「${item.name}」没有可用的服务器模式。`)
+        return
+      }
+      setSelectedEquipmentModes((current) => {
+        const retained = current.filter((mode) => allowedModes.includes(mode))
+        return retained.length > 0 ? retained : [allowedModes[0]]
+      })
       setEquippingItem(item)
       return
     }
@@ -830,17 +831,8 @@ function InventoryPage({ items, purchaseHistory, isAuthenticated, onRequireLogin
     if (!equippingItem) return
     const slot = getCosmeticSlot(equippingItem)
     if (!slot || selectedEquipmentModes.length === 0) return
-    const targetTeams: EquipmentTeam[] = equipmentTeam === "all" ? ["ct", "t"] : [equipmentTeam]
-    setEquipment((current) => {
-      const next = { ...current }
-      for (const mode of selectedEquipmentModes) {
-        for (const team of targetTeams) {
-          next[getEquipmentKey(mode, team, slot)] = equippingItem.id
-        }
-      }
-      return next
-    })
-    const teamLabel = equipmentTeam === "all" ? "所有阵营" : equipmentTeam.toUpperCase()
+    setEquipment((current) => equipStarLightItem(current, equippingItem, selectedEquipmentModes, equipmentTeam))
+    const teamLabel = slot === "weapon" ? "全阵营" : equipmentTeam === "all" ? "所有阵营" : equipmentTeam.toUpperCase()
     setInventoryNotice(`已将「${equippingItem.name}」保存到本机配置：${selectedEquipmentModes.length} 个模式 · ${teamLabel}（尚未同步服务器）。`)
     setEquippingItem(null)
   }
@@ -849,44 +841,34 @@ function InventoryPage({ items, purchaseHistory, isAuthenticated, onRequireLogin
     if (!equippingItem) return
     const slot = getCosmeticSlot(equippingItem)
     if (!slot || selectedEquipmentModes.length === 0) return
-    const targetTeams: EquipmentTeam[] = equipmentTeam === "all" ? ["ct", "t"] : [equipmentTeam]
-    setEquipment((current) => {
-      const next = { ...current }
-      for (const mode of selectedEquipmentModes) {
-        for (const team of targetTeams) {
-          delete next[getEquipmentKey(mode, team, slot)]
-        }
-      }
-      return next
-    })
-    setInventoryNotice(`已从本机清除 ${selectedEquipmentModes.length * targetTeams.length} 个外观配置（尚未同步服务器）。`)
+    setEquipment((current) => unequipStarLightItem(current, equippingItem, selectedEquipmentModes, equipmentTeam))
+    setInventoryNotice(`已从本机卸下「${equippingItem.name}」的所选配置（尚未同步服务器）。`)
     setEquippingItem(null)
   }
 
   const menuItem = contextMenu ? inventory.find((item) => item.id === contextMenu.itemId) ?? null : null
   const equippingSlot = equippingItem ? getCosmeticSlot(equippingItem) : null
-  const targetEquipmentTeams: EquipmentTeam[] = equipmentTeam === "all" ? ["ct", "t"] : [equipmentTeam]
-  const selectedConfigurationCount = selectedEquipmentModes.length * targetEquipmentTeams.length
-  const currentEquipmentIDs = equippingSlot ? selectedEquipmentModes.flatMap((mode) => targetEquipmentTeams.map((team) => equipment[getEquipmentKey(mode, team, equippingSlot)])).filter(Boolean) : []
-  const currentEquipmentNames = [...new Set(currentEquipmentIDs.map((itemID) => inventory.find((item) => item.id === itemID)?.name).filter(Boolean))]
+  const selectedConfigurationCount = selectedEquipmentModes.length * (equippingSlot === "player" && equipmentTeam === "all" ? 2 : 1)
+  const currentEquipmentIDs = equippingItem ? getConfiguredProductIds(equipment, equippingItem, selectedEquipmentModes, equipmentTeam) : []
+  const currentEquipmentNames = [...new Set(currentEquipmentIDs.map((productId) => inventory.find((item) => item.productId === productId)?.name).filter(Boolean))]
 
   return (
     <main className="page-shell inventory-page-shell">
-      <PageHeading eyebrow="我的库存" title={isAuthenticated ? "已拥有的物品" : "登录并解锁装备库"} description={isAuthenticated ? "展示当前账号可用的全部物品；外观配置仅保存在本机，使用与同步暂未开放。" : "连接当前 Steam 账号，立即查看真实库存并管理外观配置。"} action={isAuthenticated ? <div className="flex flex-col gap-2 sm:items-end"><Button variant="outline" onClick={() => setPurchaseHistoryOpen(true)}><ShoppingBag />最近购买 {purchaseHistory.length}</Button><Button variant="outline"><Boxes />全部物品 {inventory.length}</Button></div> : undefined} />
+      <PageHeading eyebrow="我的库存" title={isAuthenticated ? "已拥有的物品" : "登录并解锁装备库"} description={isAuthenticated ? "展示当前账号可用的全部物品；本机配置采用 StarLightStore 的按模式装备结构，同步暂未开放。" : "连接当前 Steam 账号，立即查看真实库存并管理外观配置。"} action={isAuthenticated ? <div className="flex flex-col gap-2 sm:items-end"><Button variant="outline" onClick={() => setPurchaseHistoryOpen(true)}><ShoppingBag />最近购买 {purchaseHistory.length}</Button><Button variant="outline"><Boxes />全部物品 {inventory.length}</Button></div> : undefined} />
       {!isAuthenticated && <section className="grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)]" aria-label="登录后解锁库存">
         <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/[0.14] via-card to-secondary/[0.12]">
           <div className="pointer-events-none absolute -left-20 -top-24 size-72 rounded-full bg-primary/20 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-28 right-4 size-72 rounded-full bg-accent/15 blur-3xl" />
           <div className="pointer-events-none absolute right-8 top-8 hidden grid-cols-2 gap-3 opacity-35 sm:grid" aria-hidden="true"><div className="grid size-20 place-items-center rounded-2xl border border-primary/25 bg-card/60 text-primary backdrop-blur-sm"><Zap className="size-8" /></div><div className="grid size-20 place-items-center rounded-2xl border border-secondary/25 bg-card/60 text-secondary backdrop-blur-sm"><UserRound className="size-8" /></div><div className="col-span-2 grid h-16 place-items-center rounded-2xl border border-accent/20 bg-card/60 text-accent backdrop-blur-sm"><Gamepad2 className="size-7" /></div></div>
           <CardContent className="relative flex min-h-[360px] flex-col justify-between p-8 sm:p-10">
-            <div className="max-w-xl"><Badge variant="outline" className="border-primary/25 bg-primary/10 text-primary"><KeyRound />登录后立即解锁</Badge><div className="mt-6 grid size-16 place-items-center rounded-2xl bg-gradient-to-br from-primary to-secondary text-white shadow-xl"><Backpack className="size-8" /></div><h2 className="mt-6 text-3xl font-semibold tracking-tight">登录 STARCS，带上你的装备</h2><p className="mt-3 max-w-lg text-sm leading-7 text-muted-foreground">自动读取当前 Steam 账号的真实库存，管理已拥有的道具，并为不同服务器模式与阵营配置专属外观。</p></div>
+            <div className="max-w-xl"><Badge variant="outline" className="border-primary/25 bg-primary/10 text-primary"><KeyRound />登录后立即解锁</Badge><div className="mt-6 grid size-16 place-items-center rounded-2xl bg-gradient-to-br from-primary to-secondary text-white shadow-xl"><Backpack className="size-8" /></div><h2 className="mt-6 text-3xl font-semibold tracking-tight">登录 STARCS，带上你的装备</h2><p className="mt-3 max-w-lg text-sm leading-7 text-muted-foreground">自动读取当前 Steam 账号的真实库存；角色外观支持按模式与阵营配置，武器外观按模式和对应武器配置。</p></div>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center"><Button size="lg" className="min-w-48 shadow-lg shadow-primary/20" onClick={onRequireLogin}><LogIn />立即登录</Button><span className="text-xs text-muted-foreground">点击后重新识别当前 Steam Session</span></div>
           </CardContent>
         </Card>
         <div className="grid gap-4">
           <Card><CardContent className="flex min-h-[104px] items-center gap-4 p-5"><div className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><Boxes /></div><div><CardTitle className="text-base">真实库存同步</CardTitle><CardDescription className="mt-1 leading-5">只展示当前账号实际持有且仍然有效的物品。</CardDescription></div></CardContent></Card>
-          <Card><CardContent className="flex min-h-[104px] items-center gap-4 p-5"><div className="grid size-11 shrink-0 place-items-center rounded-xl bg-secondary/15 text-secondary"><Gamepad2 /></div><div><CardTitle className="text-base">模式与阵营配置</CardTitle><CardDescription className="mt-1 leading-5">为武器和角色外观分别选择模式、CT、T 或所有阵营。</CardDescription></div></CardContent></Card>
-          <Card><CardContent className="flex min-h-[104px] items-center gap-4 p-5"><div className="grid size-11 shrink-0 place-items-center rounded-xl bg-accent/10 text-accent"><ShieldCheck /></div><div><CardTitle className="text-base">配置保存在本机</CardTitle><CardDescription className="mt-1 leading-5">当前装备偏好只与启动器绑定，不会改动 Steam 文件。</CardDescription></div></CardContent></Card>
+          <Card><CardContent className="flex min-h-[104px] items-center gap-4 p-5"><div className="grid size-11 shrink-0 place-items-center rounded-xl bg-secondary/15 text-secondary"><Gamepad2 /></div><div><CardTitle className="text-base">匹配游戏内规则</CardTitle><CardDescription className="mt-1 leading-5">角色外观区分 CT/T；武器外观按武器类型和 prefab 装备。</CardDescription></div></CardContent></Card>
+          <Card><CardContent className="flex min-h-[104px] items-center gap-4 p-5"><div className="grid size-11 shrink-0 place-items-center rounded-xl bg-accent/10 text-accent"><ShieldCheck /></div><div><CardTitle className="text-base">配置按账号保存</CardTitle><CardDescription className="mt-1 leading-5">当前偏好以 Steam64 隔离，并使用 StarLightStore 兼容格式保存在本机。</CardDescription></div></CardContent></Card>
         </div>
       </section>}
       {isAuthenticated && inventoryNotice && <div className="mb-4 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm">{inventoryNotice}</div>}
@@ -895,7 +877,7 @@ function InventoryPage({ items, purchaseHistory, isAuthenticated, onRequireLogin
           const Icon = displayIcons[item.icon] ?? Package
           const itemName = item.quantity > 1 ? `${item.name} × ${item.quantity}` : item.name
           const slot = getCosmeticSlot(item)
-          const isEquipped = Object.values(equipment).includes(item.id)
+          const isEquipped = isStarLightItemEquipped(equipment, item)
           return (
             <Card key={item.id} className={cn("inventory-card overflow-hidden", item.quantity <= 0 && "opacity-60")} onContextMenu={(event) => openContextMenu(event, item)}>
               <div className={cn("relative grid aspect-[4/3] place-items-center bg-gradient-to-br", item.tone, rarityToneClass(item.rarity))}><div className="absolute right-2 top-2 flex items-center gap-1"><Badge variant="outline" className={cn("border-white/20 bg-black/35 text-white backdrop-blur-sm", rarityBadgeClass(item.rarity))}>{item.rarity}</Badge>{isEquipped && <Badge variant="success"><Check />已装备</Badge>}</div><Icon className="size-12 text-white/90" /></div>
@@ -927,13 +909,13 @@ function InventoryPage({ items, purchaseHistory, isAuthenticated, onRequireLogin
         <DialogContent>
           {equippingItem && (
             <>
-              <DialogHeader><DialogTitle>配置「{equippingItem.name}」</DialogTitle><DialogDescription>勾选一个或多个模式，并为所有阵营或指定阵营装备{equippingSlot === "weapon" ? "武器" : "玩家"}外观。</DialogDescription></DialogHeader>
+              <DialogHeader><DialogTitle>配置「{equippingItem.name}」</DialogTitle><DialogDescription>{equippingSlot === "weapon" ? "勾选一个或多个模式；武器外观会按 StarLightStore 的武器类型与 prefab 配置，并对两个阵营生效。" : "勾选一个或多个模式，并为所有阵营或指定阵营装备角色外观。"}</DialogDescription></DialogHeader>
               <div className="space-y-5">
-                <div><div className="mb-2 flex items-center justify-between"><div className="text-sm font-medium">服务器模式</div><button type="button" className="text-xs text-primary hover:underline" onClick={() => setSelectedEquipmentModes(selectedEquipmentModes.length === equipmentModes.length ? [] : equipmentModes.map(([mode]) => mode))}>{selectedEquipmentModes.length === equipmentModes.length ? "清空" : "全选"}</button></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{equipmentModes.map(([mode, label]) => <label key={mode} className={cn("flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors", selectedEquipmentModes.includes(mode) ? "border-primary/40 bg-primary/10 text-foreground" : "border-border hover:bg-muted/40")}><input type="checkbox" className="size-4 accent-[var(--color-primary)]" checked={selectedEquipmentModes.includes(mode)} onChange={() => toggleEquipmentMode(mode)} /><span>{label}</span></label>)}</div></div>
-                <div><div className="mb-2 text-sm font-medium">阵营</div><div className="grid grid-cols-1 gap-2 sm:grid-cols-3"><Button type="button" variant={equipmentTeam === "all" ? "secondary" : "outline"} onClick={() => setEquipmentTeam("all")}>所有阵营</Button><Button type="button" variant={equipmentTeam === "ct" ? "secondary" : "outline"} onClick={() => setEquipmentTeam("ct")}>CT 反恐精英</Button><Button type="button" variant={equipmentTeam === "t" ? "secondary" : "outline"} onClick={() => setEquipmentTeam("t")}>T 恐怖分子</Button></div></div>
+                <div><div className="mb-2 flex items-center justify-between"><div className="text-sm font-medium">服务器模式</div><button type="button" className="text-xs text-primary hover:underline" onClick={() => { const allowedModes = equipmentModes.filter(([mode]) => productModeIsAllowed(equippingItem.mode, mode)).map(([mode]) => mode); setSelectedEquipmentModes(selectedEquipmentModes.length === allowedModes.length ? [] : allowedModes) }}>{selectedEquipmentModes.length === equipmentModes.filter(([mode]) => productModeIsAllowed(equippingItem.mode, mode)).length ? "清空" : "全选可用"}</button></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{equipmentModes.map(([mode, label]) => { const allowed = productModeIsAllowed(equippingItem.mode, mode); return <label key={mode} className={cn("flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors", allowed ? "cursor-pointer" : "cursor-not-allowed opacity-45", selectedEquipmentModes.includes(mode) ? "border-primary/40 bg-primary/10 text-foreground" : "border-border", allowed && "hover:bg-muted/40")}><input type="checkbox" className="size-4 accent-[var(--color-primary)]" disabled={!allowed} checked={selectedEquipmentModes.includes(mode)} onChange={() => toggleEquipmentMode(mode)} /><span>{label}</span></label> })}</div></div>
+                {equippingSlot === "player" ? <div><div className="mb-2 text-sm font-medium">阵营</div><div className="grid grid-cols-1 gap-2 sm:grid-cols-3"><Button type="button" variant={equipmentTeam === "all" ? "secondary" : "outline"} onClick={() => setEquipmentTeam("all")}>所有阵营</Button><Button type="button" variant={equipmentTeam === "ct" ? "secondary" : "outline"} onClick={() => setEquipmentTeam("ct")}>CT 反恐精英</Button><Button type="button" variant={equipmentTeam === "t" ? "secondary" : "outline"} onClick={() => setEquipmentTeam("t")}>T 恐怖分子</Button></div></div> : <div className="rounded-lg border border-secondary/20 bg-secondary/10 px-4 py-3 text-sm"><div className="font-medium">全阵营武器配置</div><div className="mt-1 text-xs text-muted-foreground">{equippingItem.weaponPrefab} · {equippingItem.weaponType}</div></div>}
                 <div className="rounded-lg border border-border bg-muted/25 px-4 py-3 text-sm"><div className="text-xs text-muted-foreground">将覆盖 {selectedConfigurationCount} 个配置</div><div className="mt-1 font-medium">{currentEquipmentNames.length > 0 ? `当前包含：${currentEquipmentNames.join("、")}` : "当前均未装备"}</div></div>
               </div>
-              <DialogFooter><Button variant="ghost" disabled={currentEquipmentIDs.length === 0} onClick={clearEquipment}>清除所选配置</Button><DialogClose asChild><Button variant="outline">取消</Button></DialogClose><Button disabled={selectedEquipmentModes.length === 0} onClick={confirmEquipment}><Check />确认装备</Button></DialogFooter>
+              <DialogFooter><Button variant="ghost" disabled={!currentEquipmentIDs.includes(equippingItem.productId ?? 0)} onClick={clearEquipment}>卸下此物品</Button><DialogClose asChild><Button variant="outline">取消</Button></DialogClose><Button disabled={selectedEquipmentModes.length === 0} onClick={confirmEquipment}><Check />确认装备</Button></DialogFooter>
             </>
           )}
         </DialogContent>
@@ -1145,7 +1127,7 @@ function App() {
 
       {activeTab === "home" && <HomePage announcements={bootstrap?.announcements ?? []} maps={bootstrap?.maps ?? []} backendError={bootstrapError} isBackendLoading={isBootstrapLoading} onRetryBackend={() => void loadLauncherData()} />}
       {activeTab === "store" && (effectiveBootstrap ? <StorePage data={effectiveBootstrap} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
-      {activeTab === "inventory" && (bootstrap ? <InventoryPage items={isAuthenticated ? authenticatedInventory ?? [] : []} purchaseHistory={purchaseHistory} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
+      {activeTab === "inventory" && (bootstrap ? <InventoryPage key={isAuthenticated ? effectiveAccount?.profile.userId ?? "authenticated" : "guest"} items={isAuthenticated ? authenticatedInventory ?? [] : []} purchaseHistory={purchaseHistory} steamId={isAuthenticated ? effectiveAccount?.profile.userId ?? "" : ""} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
       {activeTab === "profile" && <ProfilePage account={effectiveAccount} purchaseHistory={purchaseHistory} seasonPass={seasonPass} penalties={penalties} steamAccount={steamAccount} isAuthenticated={isAuthenticated} theme={theme} onThemeChange={setTheme} onLogin={openLogin} onLogout={logout} />}
     </div>
   )

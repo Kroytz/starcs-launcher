@@ -77,6 +77,11 @@ export type LauncherInventoryItem = {
   icon: string
   tone: string
   acquiredAt: string
+  mode: string
+  useLimit: number
+  useLimitInfo: string
+  weaponPrefab: string
+  weaponType: string
 }
 
 export type LauncherLoginSession = {

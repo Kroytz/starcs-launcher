@@ -191,6 +191,16 @@ struct LauncherInventoryItem {
     icon: String,
     tone: String,
     acquired_at: String,
+    #[serde(default)]
+    mode: String,
+    #[serde(default)]
+    use_limit: i32,
+    #[serde(default)]
+    use_limit_info: String,
+    #[serde(default)]
+    weapon_prefab: String,
+    #[serde(default)]
+    weapon_type: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
