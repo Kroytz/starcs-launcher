@@ -871,10 +871,10 @@ function InventoryPage({ items, isAuthenticated, onRequireLogin }: { items: Laun
 
   return (
     <main className="page-shell inventory-page-shell">
-      <PageHeading eyebrow="我的库存" title="已拥有的物品" description="展示当前账号可用的全部物品；外观配置仅保存在本机，使用与同步暂未开放。" action={<Button variant="outline"><Boxes />全部物品 {inventory.length}</Button>} />
-      {!isAuthenticated && <div className="mb-4 flex flex-col justify-between gap-3 rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><span>登录后可使用消耗品，并配置武器与角色外观。</span><Button size="sm" onClick={onRequireLogin}><LogIn />登录</Button></div>}
-      {inventoryNotice && <div className="mb-4 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm">{inventoryNotice}</div>}
-      <div className="inventory-grid">
+      <PageHeading eyebrow="我的库存" title="已拥有的物品" description="展示当前账号可用的全部物品；外观配置仅保存在本机，使用与同步暂未开放。" action={isAuthenticated ? <Button variant="outline"><Boxes />全部物品 {inventory.length}</Button> : undefined} />
+      {!isAuthenticated && <Card><CardContent className="flex flex-col items-center py-20 text-center"><div className="mb-4 grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary"><Backpack className="size-7" /></div><CardTitle>登录后查看真实库存</CardTitle><CardDescription className="mt-2 max-w-md leading-6">登录可以管理已拥有的道具，并为不同模式和阵营配置武器与角色外观。</CardDescription><Button className="mt-6" onClick={onRequireLogin}><LogIn />登录并读取库存</Button></CardContent></Card>}
+      {isAuthenticated && inventoryNotice && <div className="mb-4 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm">{inventoryNotice}</div>}
+      {isAuthenticated && <div className="inventory-grid">
         {inventory.map((item) => {
           const Icon = displayIcons[item.icon] ?? Package
           const itemName = item.quantity > 1 ? `${item.name} × ${item.quantity}` : item.name
@@ -888,7 +888,7 @@ function InventoryPage({ items, isAuthenticated, onRequireLogin }: { items: Laun
             </Card>
           )
         })}
-      </div>
+      </div>}
 
       {contextMenu && menuItem && (
         <div role="menu" className="fixed z-[100] w-48 overflow-hidden rounded-lg border border-border bg-card p-1 text-foreground shadow-xl" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()} onContextMenu={(event) => event.preventDefault()}>
@@ -1122,7 +1122,7 @@ function App() {
 
       {activeTab === "home" && <HomePage announcements={bootstrap?.announcements ?? []} maps={bootstrap?.maps ?? []} backendError={bootstrapError} isBackendLoading={isBootstrapLoading} onRetryBackend={() => void loadLauncherData()} />}
       {activeTab === "store" && (effectiveBootstrap ? <StorePage data={effectiveBootstrap} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
-      {activeTab === "inventory" && (bootstrap ? <InventoryPage items={isAuthenticated ? authenticatedInventory ?? [] : bootstrap.inventory} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
+      {activeTab === "inventory" && (bootstrap ? <InventoryPage items={isAuthenticated ? authenticatedInventory ?? [] : []} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
       {activeTab === "profile" && <ProfilePage account={effectiveAccount} purchaseHistory={purchaseHistory} seasonPass={seasonPass} penalties={penalties} steamAccount={steamAccount} isAuthenticated={isAuthenticated} theme={theme} onThemeChange={setTheme} onLogin={openLogin} onLogout={logout} />}
     </div>
   )
