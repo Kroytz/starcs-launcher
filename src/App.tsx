@@ -611,10 +611,6 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
   }
 
   async function purchase(item: LauncherStoreItem) {
-    if (!isAuthenticated) {
-      onRequireLogin()
-      return
-    }
     if (item.purchaseBackend === "afdian-cdk") {
       if (!item.purchaseUrl) {
         setStoreNotice(`「${item.title}」暂时没有可用的爱发电购买链接。`)
@@ -627,17 +623,21 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
       }
       return
     }
+    if (!isAuthenticated) {
+      onRequireLogin()
+      return
+    }
     const backendName = item.purchaseBackend === "challenge-stardust" ? "DB_CHALLENGE 星尘商店" : "DB_STAR 星光商店"
     setStoreNotice(`「${item.title}」将通过 ${backendName} 的独立购买流程处理；当前后端只读，购买暂未开放。`)
   }
 
   return (
     <main className="page-shell">
-      <PageHeading eyebrow="STAR 商城" title="星社区兑换中心" description="管理三种货币，并在星光、星尘与发电商店选购物品。" />
+      <PageHeading eyebrow="STAR 商城" title="星社区兑换中心" description={isAuthenticated ? "管理三种货币，并在星光、星尘与发电商店选购物品。" : "浏览发电商店商品，无需登录即可前往购买。"} />
 
-      {!isAuthenticated && <div className="mb-5 flex flex-col justify-between gap-3 rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><span>登录后可查看真实余额、购买记录与商城数据；交易功能暂未开放。</span><Button size="sm" onClick={onRequireLogin}><LogIn />登录</Button></div>}
+      {!isAuthenticated && activeStore !== "afdian" && <div className="mb-5 flex flex-col justify-between gap-3 rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><span>登录后可查看真实余额，并进行星光与星尘商城操作。</span><Button size="sm" onClick={onRequireLogin}><LogIn />登录</Button></div>}
 
-      <div className="currency-grid">
+      {isAuthenticated && <div className="currency-grid">
         <Card className="currency-card currency-card-coin">
           <CardContent className="relative flex items-center gap-4 p-5">
             <div className="currency-icon bg-accent/15 text-accent"><Coins /></div>
@@ -650,7 +650,7 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
         <Card className="currency-card currency-card-stardust">
           <CardContent className="relative flex items-center gap-4 p-5"><div className="currency-icon bg-secondary/15 text-secondary"><Gem /></div><div><div className="text-xs font-medium text-muted-foreground">星尘</div><div className="mt-1 flex items-center gap-2"><span className="text-2xl font-semibold tabular-nums">{balanceLabel(wallet.stardust, wallet.stardustAvailable)}</span><Button variant="outline" size="icon" className="size-7 rounded-full" aria-label="兑换星尘" title={isAuthenticated ? "查看星尘兑换" : "登录后兑换"} onClick={() => isAuthenticated ? setCurrencyPopup("stardust") : onRequireLogin()}><Plus /></Button></div></div></CardContent>
         </Card>
-      </div>
+      </div>}
 
       <Dialog open={currencyPopup !== null} onOpenChange={(open) => { if (!open) setCurrencyPopup(null) }}>
         <DialogContent>
@@ -676,7 +676,7 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
           <Button variant={activeStore === "starlight" ? "secondary" : "ghost"} onClick={() => setActiveStore("starlight")}><Sparkles />星光商店</Button>
           <Button variant={activeStore === "stardust" ? "secondary" : "ghost"} onClick={() => setActiveStore("stardust")}><Gem />星尘商店</Button>
         </div>
-        {activeStore !== "afdian" && <div className="text-sm text-muted-foreground">当前余额：<span className="font-semibold text-foreground">{!isAuthenticated ? "登录后查看" : activeBalanceAvailable ? `${activeBalance.toLocaleString()} ${activeStore === "starlight" ? "星光" : "星尘"}` : "当前数据库暂无数据"}</span></div>}
+        {isAuthenticated && activeStore !== "afdian" && <div className="text-sm text-muted-foreground">当前余额：<span className="font-semibold text-foreground">{activeBalanceAvailable ? `${activeBalance.toLocaleString()} ${activeStore === "starlight" ? "星光" : "星尘"}` : "当前数据库暂无数据"}</span></div>}
       </div>
 
       <div className="relative mt-4">
@@ -703,7 +703,7 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
                 {!isAfdianItem && <Icon className="size-12 text-white/90" />}
               </div>
               <CardHeader><div className="flex items-center justify-between gap-2"><div className="flex min-w-0 gap-1"><Badge variant="secondary">{item.category || "其他"}</Badge>{item.tag && item.tag !== item.category && <Badge variant="outline" className={rarityBadgeClass(item.tag)}>{item.tag}</Badge>}</div><span className="flex items-center gap-1 font-semibold text-primary">{activeStore === "afdian" ? <>¥{item.price}</> : <>{activeStore === "starlight" ? <Sparkles className="size-3.5" /> : <Gem className="size-3.5" />}{item.price}</>}</span></div><CardTitle className="pt-3 text-base">{item.title}</CardTitle><CardDescription>{item.description}</CardDescription></CardHeader>
-              <CardContent><Button className="w-full" variant="outline" onClick={() => void purchase(item)}>{!isAuthenticated ? "登录后购买" : item.purchaseBackend === "afdian-cdk" ? "前往爱发电购买" : item.purchaseBackend === "challenge-stardust" ? "星尘购买（只读）" : "星光购买（只读）"}</Button></CardContent>
+              <CardContent><Button className="w-full" variant="outline" onClick={() => void purchase(item)}>{item.purchaseBackend === "afdian-cdk" ? "前往爱发电购买" : !isAuthenticated ? "登录后购买" : item.purchaseBackend === "challenge-stardust" ? "星尘购买（只读）" : "星光购买（只读）"}</Button></CardContent>
             </Card>
           )
         })}
