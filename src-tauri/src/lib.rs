@@ -285,6 +285,21 @@ struct LauncherPasswordVerification {
     valid: bool,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LauncherEquipmentMutationRequest {
+    product_id: i64,
+    modes: Vec<String>,
+    team: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LauncherEquipmentCommandResult {
+    authenticated: bool,
+    equipment: Option<serde_json::Value>,
+}
+
 fn query_a2s_latency(ip: &str, port: u16) -> Option<u64> {
     let server_addr = format!("{ip}:{port}").to_socket_addrs().ok()?.next()?;
     let bind_addr = if server_addr.is_ipv4() {
@@ -440,6 +455,87 @@ async fn verify_launcher_password(token: String, password: String) -> Result<boo
     Ok(payload.data.is_some_and(|data| data.valid))
 }
 
+#[tauri::command]
+async fn fetch_launcher_equipment(
+    token: String,
+    password: String,
+) -> Result<LauncherEquipmentCommandResult, String> {
+    let backend_url = std::env::var("STAR_LAUNCHER_BACKEND_URL")
+        .unwrap_or_else(|_| DEFAULT_LAUNCHER_BACKEND_URL.to_string());
+    let request_url = format!("{}/api/v1/me/equipment", backend_url.trim_end_matches('/'));
+    let response = reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|error| format!("创建装备请求客户端失败：{error}"))?
+        .get(&request_url)
+        .bearer_auth(token)
+        .header("X-StarCS-Reauth", password)
+        .send()
+        .await
+        .map_err(|error| format!("连接装备配置服务失败（{request_url}）：{error}"))?;
+    parse_equipment_response(response).await
+}
+
+#[tauri::command]
+async fn update_launcher_equipment(
+    token: String,
+    password: String,
+    product_id: i64,
+    modes: Vec<String>,
+    team: String,
+    equip: bool,
+) -> Result<LauncherEquipmentCommandResult, String> {
+    let backend_url = std::env::var("STAR_LAUNCHER_BACKEND_URL")
+        .unwrap_or_else(|_| DEFAULT_LAUNCHER_BACKEND_URL.to_string());
+    let action = if equip { "equip" } else { "unequip" };
+    let request_url = format!(
+        "{}/api/v1/me/equipment/{action}",
+        backend_url.trim_end_matches('/')
+    );
+    let response = reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .build()
+        .map_err(|error| format!("创建装备请求客户端失败：{error}"))?
+        .post(&request_url)
+        .bearer_auth(token)
+        .header("X-StarCS-Reauth", password)
+        .json(&LauncherEquipmentMutationRequest {
+            product_id,
+            modes,
+            team,
+        })
+        .send()
+        .await
+        .map_err(|error| format!("连接装备配置服务失败（{request_url}）：{error}"))?;
+    parse_equipment_response(response).await
+}
+
+async fn parse_equipment_response(
+    response: reqwest::Response,
+) -> Result<LauncherEquipmentCommandResult, String> {
+    let status = response.status();
+    let payload = response
+        .json::<OptionalApiEnvelope<serde_json::Value>>()
+        .await
+        .map_err(|error| format!("解析装备配置响应失败：{error}"))?;
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return Ok(LauncherEquipmentCommandResult {
+            authenticated: false,
+            equipment: None,
+        });
+    }
+    if !status.is_success() || payload.code != 2000 {
+        return Err(payload.msg);
+    }
+    let equipment = payload
+        .data
+        .ok_or_else(|| "装备配置响应缺少数据".to_string())?;
+    Ok(LauncherEquipmentCommandResult {
+        authenticated: true,
+        equipment: Some(equipment),
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -449,6 +545,8 @@ pub fn run() {
             fetch_launcher_bootstrap,
             login_launcher_account,
             verify_launcher_password,
+            fetch_launcher_equipment,
+            update_launcher_equipment,
             steam::get_local_steam_account,
             steam::load_remembered_password,
             steam::update_remembered_password,

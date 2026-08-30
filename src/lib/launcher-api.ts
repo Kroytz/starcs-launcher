@@ -84,6 +84,32 @@ export type LauncherInventoryItem = {
   weaponType: string
 }
 
+export type StarLightPlayerSkinPreference = {
+  ct: number
+  t: number
+}
+
+export type StarLightWeaponSkinPreference = {
+  player_skin_exclusive: Record<string, Record<string, number>>
+  weapons: Record<string, Record<string, number>>
+}
+
+export type StarLightModeEquipment = {
+  p_s: StarLightPlayerSkinPreference
+  w_s: StarLightWeaponSkinPreference
+}
+
+export type StarLightEquipmentProfile = {
+  version: 2
+  plugin: "star_light_store"
+  modes: Record<string, StarLightModeEquipment>
+}
+
+export type LauncherEquipmentCommandResult = {
+  authenticated: boolean
+  equipment: StarLightEquipmentProfile | null
+}
+
 export type LauncherLoginSession = {
   token: string
   expiresAt: string
@@ -180,4 +206,12 @@ export async function loginLauncherAccount(steamId: string, password: string) {
 
 export async function verifyLauncherPassword(token: string, password: string) {
   return invoke<boolean>("verify_launcher_password", { token, password })
+}
+
+export async function fetchLauncherEquipment(token: string, password: string) {
+  return invoke<LauncherEquipmentCommandResult>("fetch_launcher_equipment", { token, password })
+}
+
+export async function updateLauncherEquipment(token: string, password: string, productId: number, modes: string[], team: "all" | "ct" | "t", equip: boolean) {
+  return invoke<LauncherEquipmentCommandResult>("update_launcher_equipment", { token, password, productId, modes, team, equip })
 }

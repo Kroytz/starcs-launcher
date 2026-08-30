@@ -68,15 +68,11 @@ import {
   type ThemePreference,
 } from "@/lib/theme"
 import {
-  equipStarLightItem,
   getConfiguredProductIds,
   getCosmeticSlot,
   getEquipmentValidationError,
   isStarLightItemEquipped,
-  loadStarLightEquipment,
   productModeIsAllowed,
-  saveStarLightEquipment,
-  unequipStarLightItem,
   type EquipmentTargetTeam,
 } from "@/lib/starlight-equipment"
 import {
@@ -89,8 +85,9 @@ import {
 } from "@/lib/servers"
 import {
   fetchLauncherBootstrap,
+  fetchLauncherEquipment,
   loginLauncherAccount,
-  verifyLauncherPassword,
+  updateLauncherEquipment,
   type LauncherAccount,
   type LauncherAnnouncement,
   type LauncherBootstrap,
@@ -100,6 +97,7 @@ import {
   type LauncherPurchaseHistoryItem,
   type LauncherSeasonPass,
   type LauncherStoreItem,
+  type StarLightEquipmentProfile,
 } from "@/lib/launcher-api"
 import {
   getLocalSteamAccount,
@@ -782,14 +780,13 @@ function BackendDataPage({ isLoading, error, onRetry }: { isLoading: boolean; er
 
 const equipmentModes = Object.entries(modeLabels)
 
-function InventoryPage({ items, purchaseHistory, steamId, isAuthenticated, onRequireLogin, onVerifyOperation }: { items: LauncherInventoryItem[]; purchaseHistory: LauncherPurchaseHistoryItem[]; steamId: string; isAuthenticated: boolean; onRequireLogin: () => void; onVerifyOperation: () => Promise<boolean> }) {
+function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, onRequireLogin, onEquipmentOperation }: { items: LauncherInventoryItem[]; purchaseHistory: LauncherPurchaseHistoryItem[]; equipment: StarLightEquipmentProfile; isAuthenticated: boolean; onRequireLogin: () => void; onEquipmentOperation: (equip: boolean, productId: number, modes: string[], team: EquipmentTargetTeam) => Promise<boolean> }) {
   const [inventory, setInventory] = useState(items)
   const [purchaseHistoryOpen, setPurchaseHistoryOpen] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ itemId: string; x: number; y: number } | null>(null)
   const [equippingItem, setEquippingItem] = useState<LauncherInventoryItem | null>(null)
   const [selectedEquipmentModes, setSelectedEquipmentModes] = useState<string[]>(["ZM"])
   const [equipmentTeam, setEquipmentTeam] = useState<EquipmentTargetTeam>("all")
-  const [equipment, setEquipment] = useState(() => loadStarLightEquipment(steamId, items))
   const [inventoryNotice, setInventoryNotice] = useState<string | null>(null)
   const [equipmentError, setEquipmentError] = useState<string | null>(null)
   const [isEquipmentSubmitting, setIsEquipmentSubmitting] = useState(false)
@@ -797,10 +794,6 @@ function InventoryPage({ items, purchaseHistory, steamId, isAuthenticated, onReq
   useEffect(() => {
     setInventory(items)
   }, [items])
-
-  useEffect(() => {
-    saveStarLightEquipment(steamId, equipment)
-  }, [equipment, steamId])
 
   useEffect(() => {
     const closeMenu = () => setContextMenu(null)
@@ -874,14 +867,14 @@ function InventoryPage({ items, purchaseHistory, steamId, isAuthenticated, onReq
   async function confirmEquipment() {
     if (!equippingItem) return
     const slot = getCosmeticSlot(equippingItem)
-    if (!slot || selectedEquipmentModes.length === 0) return
+    const productId = equippingItem.productId
+    if (!slot || !productId || selectedEquipmentModes.length === 0) return
     setEquipmentError(null)
     setIsEquipmentSubmitting(true)
     try {
-      if (!await onVerifyOperation()) return
-      setEquipment((current) => equipStarLightItem(current, equippingItem, selectedEquipmentModes, equipmentTeam))
+      if (!await onEquipmentOperation(true, productId, selectedEquipmentModes, equipmentTeam)) return
       const teamLabel = slot === "weapon" ? "全阵营" : equipmentTeam === "all" ? "所有阵营" : equipmentTeam.toUpperCase()
-      setInventoryNotice(`已将「${equippingItem.name}」保存到本机配置：${selectedEquipmentModes.length} 个模式 · ${teamLabel}（尚未同步服务器）。`)
+      setInventoryNotice(`已将「${equippingItem.name}」同步到游戏内配置：${selectedEquipmentModes.length} 个模式 · ${teamLabel}。`)
       setEquippingItem(null)
     } catch (error) {
       setEquipmentError(error instanceof Error ? error.message : String(error))
@@ -893,13 +886,13 @@ function InventoryPage({ items, purchaseHistory, steamId, isAuthenticated, onReq
   async function clearEquipment() {
     if (!equippingItem) return
     const slot = getCosmeticSlot(equippingItem)
-    if (!slot || selectedEquipmentModes.length === 0) return
+    const productId = equippingItem.productId
+    if (!slot || !productId || selectedEquipmentModes.length === 0) return
     setEquipmentError(null)
     setIsEquipmentSubmitting(true)
     try {
-      if (!await onVerifyOperation()) return
-      setEquipment((current) => unequipStarLightItem(current, equippingItem, selectedEquipmentModes, equipmentTeam))
-      setInventoryNotice(`已从本机卸下「${equippingItem.name}」的所选配置（尚未同步服务器）。`)
+      if (!await onEquipmentOperation(false, productId, selectedEquipmentModes, equipmentTeam)) return
+      setInventoryNotice(`已从游戏内配置卸下「${equippingItem.name}」的所选模式。`)
       setEquippingItem(null)
     } catch (error) {
       setEquipmentError(error instanceof Error ? error.message : String(error))
@@ -916,7 +909,7 @@ function InventoryPage({ items, purchaseHistory, steamId, isAuthenticated, onReq
 
   return (
     <main className="page-shell inventory-page-shell">
-      <PageHeading eyebrow="我的库存" title={isAuthenticated ? "已拥有的物品" : "登录并解锁装备库"} description={isAuthenticated ? "展示当前账号可用的全部物品；本机配置采用 StarLightStore 的按模式装备结构，同步暂未开放。" : "连接当前 Steam 账号，立即查看真实库存并管理外观配置。"} action={isAuthenticated ? <div className="flex flex-col gap-2 sm:items-end"><Button variant="outline" onClick={() => setPurchaseHistoryOpen(true)}><ShoppingBag />最近购买 {purchaseHistory.length}</Button><Button variant="outline"><Boxes />全部物品 {inventory.length}</Button></div> : undefined} />
+      <PageHeading eyebrow="我的库存" title={isAuthenticated ? "已拥有的物品" : "登录并解锁装备库"} description={isAuthenticated ? "展示当前账号可用的全部物品；装备配置会同步到 StarLightStore 的各模式游戏服务器。" : "连接当前 Steam 账号，立即查看真实库存并管理外观配置。"} action={isAuthenticated ? <div className="flex flex-col gap-2 sm:items-end"><Button variant="outline" onClick={() => setPurchaseHistoryOpen(true)}><ShoppingBag />最近购买 {purchaseHistory.length}</Button><Button variant="outline"><Boxes />全部物品 {inventory.length}</Button></div> : undefined} />
       {!isAuthenticated && <section className="grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)]" aria-label="登录后解锁库存">
         <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/[0.14] via-card to-secondary/[0.12]">
           <div className="pointer-events-none absolute -left-20 -top-24 size-72 rounded-full bg-primary/20 blur-3xl" />
@@ -930,7 +923,7 @@ function InventoryPage({ items, purchaseHistory, steamId, isAuthenticated, onReq
         <div className="grid gap-4">
           <Card><CardContent className="flex min-h-[104px] items-center gap-4 p-5"><div className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><Boxes /></div><div><CardTitle className="text-base">真实库存同步</CardTitle><CardDescription className="mt-1 leading-5">只展示当前账号实际持有且仍然有效的物品。</CardDescription></div></CardContent></Card>
           <Card><CardContent className="flex min-h-[104px] items-center gap-4 p-5"><div className="grid size-11 shrink-0 place-items-center rounded-xl bg-secondary/15 text-secondary"><Gamepad2 /></div><div><CardTitle className="text-base">匹配游戏内规则</CardTitle><CardDescription className="mt-1 leading-5">角色外观区分 CT/T；武器外观按武器类型和 prefab 装备。</CardDescription></div></CardContent></Card>
-          <Card><CardContent className="flex min-h-[104px] items-center gap-4 p-5"><div className="grid size-11 shrink-0 place-items-center rounded-xl bg-accent/10 text-accent"><ShieldCheck /></div><div><CardTitle className="text-base">配置按账号保存</CardTitle><CardDescription className="mt-1 leading-5">当前偏好以 Steam64 隔离，并使用 StarLightStore 兼容格式保存在本机。</CardDescription></div></CardContent></Card>
+          <Card><CardContent className="flex min-h-[104px] items-center gap-4 p-5"><div className="grid size-11 shrink-0 place-items-center rounded-xl bg-accent/10 text-accent"><ShieldCheck /></div><div><CardTitle className="text-base">配置按账号同步</CardTitle><CardDescription className="mt-1 leading-5">偏好以 Steam64 与模式隔离，并同步到游戏服务器正在使用的 StarLightStore 配置。</CardDescription></div></CardContent></Card>
         </div>
       </section>}
       {isAuthenticated && inventoryNotice && <div className="mb-4 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm">{inventoryNotice}</div>}
@@ -1044,6 +1037,7 @@ function App() {
   const [authToken, setAuthToken] = useState<string | null>(null)
   const [authenticatedAccount, setAuthenticatedAccount] = useState<LauncherAccount | null>(null)
   const [authenticatedInventory, setAuthenticatedInventory] = useState<LauncherInventoryItem[] | null>(null)
+  const [authenticatedEquipment, setAuthenticatedEquipment] = useState<StarLightEquipmentProfile | null>(null)
   const [purchaseHistory, setPurchaseHistory] = useState<LauncherPurchaseHistoryItem[]>([])
   const [seasonPass, setSeasonPass] = useState<LauncherSeasonPass | null>(null)
   const [penalties, setPenalties] = useState<LauncherPenalty[]>([])
@@ -1137,9 +1131,14 @@ function App() {
     setIsLoginSubmitting(true)
     try {
       const session = await loginLauncherAccount(steamAccount.steamId, password)
+      const equipmentResult = await fetchLauncherEquipment(session.token, password)
+      if (!equipmentResult.authenticated || !equipmentResult.equipment) {
+        throw new Error("游戏内密码已失效，请使用当前密码重新登录。")
+      }
       await updateRememberedPassword(steamAccount.steamId, rememberPassword ? password : null)
       setAuthenticatedAccount(session.account)
       setAuthenticatedInventory(session.inventory)
+      setAuthenticatedEquipment(equipmentResult.equipment)
       setPurchaseHistory(session.purchaseHistory)
       setSeasonPass(session.seasonPass)
       setPenalties(session.penalties)
@@ -1156,6 +1155,7 @@ function App() {
     setAuthToken(null)
     setAuthenticatedAccount(null)
     setAuthenticatedInventory(null)
+    setAuthenticatedEquipment(null)
     setPurchaseHistory([])
     setSeasonPass(null)
     setPenalties([])
@@ -1176,16 +1176,20 @@ function App() {
     setLoginOpen(true)
   }
 
-  async function verifySensitiveOperation() {
+  async function applyEquipmentOperation(equip: boolean, productId: number, modes: string[], team: EquipmentTargetTeam) {
     if (!authToken) {
       openLogin()
       return false
     }
-    const valid = await verifyLauncherPassword(authToken, password)
-    if (!valid) {
+    const result = await updateLauncherEquipment(authToken, password, productId, modes, team, equip)
+    if (!result.authenticated) {
       await invalidateAuthentication()
       return false
     }
+    if (!result.equipment) {
+      throw new Error("后端未返回更新后的装备配置。")
+    }
+    setAuthenticatedEquipment(result.equipment)
     return true
   }
 
@@ -1218,7 +1222,7 @@ function App() {
 
       {activeTab === "home" && <HomePage announcements={bootstrap?.announcements ?? []} maps={bootstrap?.maps ?? []} backendError={bootstrapError} isBackendLoading={isBootstrapLoading} onRetryBackend={() => void loadLauncherData()} />}
       {activeTab === "store" && (effectiveBootstrap ? <StorePage data={effectiveBootstrap} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
-      {activeTab === "inventory" && (bootstrap ? <InventoryPage key={isAuthenticated ? effectiveAccount?.profile.userId ?? "authenticated" : "guest"} items={isAuthenticated ? authenticatedInventory ?? [] : []} purchaseHistory={purchaseHistory} steamId={isAuthenticated ? effectiveAccount?.profile.userId ?? "" : ""} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} onVerifyOperation={verifySensitiveOperation} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
+      {activeTab === "inventory" && (bootstrap ? (isAuthenticated && !authenticatedEquipment ? <BackendDataPage isLoading error={null} onRetry={() => undefined} /> : <InventoryPage key={isAuthenticated ? effectiveAccount?.profile.userId ?? "authenticated" : "guest"} items={isAuthenticated ? authenticatedInventory ?? [] : []} purchaseHistory={purchaseHistory} equipment={authenticatedEquipment ?? { version: 2, plugin: "star_light_store", modes: {} }} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} onEquipmentOperation={applyEquipmentOperation} />) : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
       {activeTab === "profile" && <ProfilePage account={effectiveAccount} purchaseHistory={purchaseHistory} seasonPass={seasonPass} penalties={penalties} steamAccount={steamAccount} isAuthenticated={isAuthenticated} theme={theme} onThemeChange={setTheme} onLogin={openLogin} onLogout={logout} />}
     </div>
   )
