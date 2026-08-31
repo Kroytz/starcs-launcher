@@ -571,7 +571,7 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
               const isFavorite = favorites.includes(server.id)
               const meta = statusMeta[server.status]
               return (
-                <button key={server.id} className={cn("server-row", isSelected && "server-row-selected")} onClick={() => setSelectedId(server.id)}>
+                <button key={server.id} className={cn("server-row", isSelected && "server-row-selected")} onClick={() => setSelectedId(server.id)} onDoubleClick={() => { if (joiningServerId !== null) return; prepareJoin(server) }}>
                   <div className="flex min-w-0 items-center gap-3">
                     <ServerModeIcon server={server} />
                     <div className="min-w-0 text-left">
@@ -583,7 +583,7 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
                   <div><div className="mb-1.5 flex items-center justify-end gap-1 text-xs"><span>{server.players}</span><span className="text-muted-foreground">/ {server.capacity}</span></div><Progress value={server.capacity > 0 ? (server.players / server.capacity) * 100 : 0} /></div>
                   <div className="hidden items-center gap-1.5 text-sm md:flex"><Signal className={cn("size-3.5", server.ping === null ? "text-muted-foreground" : server.ping < 60 ? "text-emerald-500" : server.ping < 120 ? "text-amber-500" : "text-red-500")} />{server.ping !== null ? `${server.ping} ms` : "—"}</div>
                   <div className="flex items-center justify-end gap-1">
-                    <span role="button" tabIndex={0} aria-label="收藏" className="rounded-md p-2 hover:bg-accent/15" onClick={(event) => { event.stopPropagation(); toggleFavorite(server.id) }} onKeyDown={() => undefined}><Star className={cn("size-4", isFavorite && "fill-amber-400 text-amber-500")} /></span>
+                    <span role="button" tabIndex={0} aria-label="收藏" className="rounded-md p-2 hover:bg-accent/15" onClick={(event) => { event.stopPropagation(); toggleFavorite(server.id) }} onDoubleClick={(event) => event.stopPropagation()} onKeyDown={() => undefined}><Star className={cn("size-4", isFavorite && "fill-amber-400 text-amber-500")} /></span>
                     <ChevronRight className="size-4 text-muted-foreground" />
                   </div>
                 </button>
