@@ -644,7 +644,7 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
               <div key={pack.id} className="flex flex-col gap-3 rounded-xl border border-border bg-muted/20 p-4 sm:flex-row sm:items-center">
                 <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Package className="size-5" /></div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2"><span className="font-medium">{pack.title}</span><Badge variant={pack.kind === "base" ? "secondary" : "outline"}>{pack.kind === "base" ? "基础资源" : `${modeLabels[pack.mode] ?? pack.mode}模式`}</Badge></div>
+                  <div className="flex flex-wrap items-center gap-2"><span className="font-medium">{pack.title}</span><Badge variant={pack.kind === "base" ? "secondary" : "outline"}>{pack.kind === "base" ? "基础资源" : `${modeLabels[pack.mode] ?? pack.mode}`}</Badge></div>
                   <p className="mt-1 text-xs text-muted-foreground">{pack.description || `Workshop ${pack.workshopId}`}</p>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => void openWorkshopPack(pack)}><ExternalLink />Steam 打开</Button>
@@ -1262,12 +1262,11 @@ function SeasonPassTask({ title, current, milestones, unit, statuses }: { title:
   const milestoneHint = (index: number, milestone: number) => {
     const status = milestoneStatus(index, milestone)
     if (statuses) {
-      if (status >= 3) return "奖励已领取"
-      if (status === 2) return "已完成，奖励可在游戏内领取"
+      if (status >= 2) return "奖励已领取"
     } else if (status === 2) {
       return "已完成"
     }
-    if (current >= milestone) return "进度已达成，等待任务结算"
+    if (current >= milestone) return "进度已达成，可在游戏内完成任务"
     return `还差 ${milestone - current} ${unit}`
   }
   return (
