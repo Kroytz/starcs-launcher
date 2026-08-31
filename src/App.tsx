@@ -92,6 +92,7 @@ import {
   fetchLauncherEquipment,
   fetchLauncherWorkshopPacks,
   loginLauncherAccount,
+  purchaseStoreItem,
   updateLauncherEquipment,
   updateStardustEquipment,
   type LauncherAccount,
@@ -664,19 +665,48 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
 type ExchangeCurrency = "starlight" | "stardust"
 type StoreKind = ExchangeCurrency | "afdian"
 type CurrencyPopup = "recharge" | ExchangeCurrency
+type StoreItemGroup = { key: string; tiers: LauncherStoreItem[] }
 
-function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBootstrap; isAuthenticated: boolean; onRequireLogin: () => void }) {
+// 期限/数量档位的展示标签：x5（数量型）、30 天（期限型）、永久
+function storeTierLabel(item: LauncherStoreItem) {
+  if (item.quantity > 1) return `x${item.quantity}`
+  if (item.days > 0) return `${item.days} 天`
+  return "长期"
+}
+
+function StorePage({ data, isAuthenticated, onRequireLogin, onPurchase }: { data: LauncherBootstrap; isAuthenticated: boolean; onRequireLogin: () => void; onPurchase: (item: LauncherStoreItem) => Promise<boolean> }) {
   const [activeStore, setActiveStore] = useState<StoreKind>("afdian")
   const [activeCategory, setActiveCategory] = useState("all")
   const [currencyPopup, setCurrencyPopup] = useState<CurrencyPopup | null>(null)
   const [exchangeAmount, setExchangeAmount] = useState("1")
   const [storeNotice, setStoreNotice] = useState<string | null>(null)
+  const [purchaseTarget, setPurchaseTarget] = useState<LauncherStoreItem[] | null>(null)
+  const [purchaseTierId, setPurchaseTierId] = useState<string | null>(null)
+  const [isPurchasing, setIsPurchasing] = useState(false)
+  const [purchaseError, setPurchaseError] = useState<string | null>(null)
   const categoryScrollRef = useRef<HTMLDivElement>(null)
   const [categoryScrollEdges, setCategoryScrollEdges] = useState({ left: false, right: false })
 
   const currencyItems = data.storeItems.filter((item) => item.enabled && item.currency === activeStore)
   const categories = [...new Set(currencyItems.map((item) => item.category || "其他"))]
   const activeItems = currencyItems.filter((item) => activeCategory === "all" || (item.category || "其他") === activeCategory)
+  // 同一星光商品的多个价格档位（7 天/30 天/永久等）合并成一张卡片，购买时在弹窗内选档位
+  const groupedItems: StoreItemGroup[] = []
+  const groupIndex: Record<string, number> = {}
+  for (const item of activeItems) {
+    const key = item.purchaseBackend === "star-product" ? `star-product-${item.externalId}` : item.id
+    const existing = groupIndex[key]
+    if (existing === undefined) {
+      groupIndex[key] = groupedItems.length
+      groupedItems.push({ key, tiers: [item] })
+    } else {
+      groupedItems[existing].tiers.push(item)
+    }
+  }
+  for (const group of groupedItems) {
+    group.tiers.sort((a, b) => a.price - b.price || a.days - b.days || a.quantity - b.quantity)
+  }
+  const selectedTier = purchaseTarget?.find((tier) => tier.id === purchaseTierId) ?? purchaseTarget?.[0] ?? null
   const wallet = data.account.wallet
   const activeBalance = activeStore === "starlight" ? wallet.starlight : activeStore === "stardust" ? wallet.stardust : 0
   const activeBalanceAvailable = activeStore === "starlight" ? wallet.starlightAvailable : activeStore === "stardust" ? wallet.stardustAvailable : false
@@ -727,7 +757,8 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
     setCurrencyPopup(null)
   }
 
-  async function purchase(item: LauncherStoreItem) {
+  async function purchase(group: StoreItemGroup) {
+    const item = group.tiers[0]
     if (item.purchaseBackend === "afdian-cdk") {
       if (!item.purchaseUrl) {
         setStoreNotice(`「${item.title}」暂时没有可用的爱发电购买链接。`)
@@ -744,8 +775,33 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
       onRequireLogin()
       return
     }
-    const backendName = item.purchaseBackend === "challenge-stardust" ? "星尘商店" : "星光商店"
-    setStoreNotice(`「${item.title}」在 ${backendName} 的购买暂未开放。`)
+    if (item.purchaseBackend === "star-product") {
+      setPurchaseError(null)
+      setPurchaseTierId(null)
+      setPurchaseTarget(group.tiers)
+      return
+    }
+    setStoreNotice(`「${item.title}」在 星尘商店 的购买暂未开放。`)
+  }
+
+  async function confirmPurchase() {
+    if (!purchaseTarget || !selectedTier || isPurchasing) return
+    setIsPurchasing(true)
+    setPurchaseError(null)
+    try {
+      const purchased = await onPurchase(selectedTier)
+      if (purchased) {
+        setStoreNotice(`已购买「${purchaseTarget[0].title}」（${storeTierLabel(selectedTier)}），可在库存页查看。`)
+        setPurchaseTarget(null)
+      }
+    } catch (error) {
+      console.error("[StarCS Launcher] 购买星光商品失败", error)
+      // Tauri invoke 拒绝时抛出的是字符串（后端 msg），不是 Error 实例
+      const message = typeof error === "string" && error.trim() ? error : error instanceof Error && error.message.trim() ? error.message : "购买失败，请稍后重试。"
+      setPurchaseError(message)
+    } finally {
+      setIsPurchasing(false)
+    }
   }
 
   return (
@@ -787,6 +843,41 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
         </DialogContent>
       </Dialog>
 
+      <Dialog open={purchaseTarget !== null} onOpenChange={(open) => { if (!open && !isPurchasing) setPurchaseTarget(null) }}>
+        <DialogContent showCloseButton={!isPurchasing}>
+          {purchaseTarget && selectedTier && (
+            <>
+              <DialogHeader><DialogTitle className="flex items-center gap-2"><Sparkles className="size-5 text-primary" />确认购买</DialogTitle><DialogDescription>购买后立即发放到游戏内库存，可在库存页查看。</DialogDescription></DialogHeader>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 px-4 py-3"><span className="min-w-0 truncate font-medium">{purchaseTarget[0].title}</span><Badge variant="secondary">{purchaseTarget[0].category || "其他"}</Badge></div>
+                {purchaseTarget.length > 1 && (
+                  <div className="grid gap-2">
+                    {purchaseTarget.map((tier) => (
+                      <button key={tier.id} type="button" aria-pressed={selectedTier.id === tier.id} onClick={() => setPurchaseTierId(tier.id)} className={cn("flex items-center justify-between rounded-lg border px-4 py-2.5 text-sm transition-colors", selectedTier.id === tier.id ? "border-primary bg-primary/10" : "border-border hover:bg-muted/40")}>
+                        <span className="flex items-center gap-2">{selectedTier.id === tier.id && <Check className="size-4 text-primary" />}{storeTierLabel(tier)}</span>
+                        <span className="flex items-center gap-1.5 font-semibold"><Sparkles className="size-4 text-primary" />{tier.price}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="space-y-2 rounded-xl border border-border px-4 py-3 text-sm">
+                  <div className="flex items-center justify-between"><span className="text-muted-foreground">期限</span><span className="font-medium">{storeTierLabel(selectedTier)}{selectedTier.days > 0 && selectedTier.quantity <= 1 ? "（重复购买时长累加）" : ""}</span></div>
+                  <div className="flex items-center justify-between"><span className="text-muted-foreground">价格</span><span className="flex items-center gap-1.5 font-semibold"><Sparkles className="size-4 text-primary" />{selectedTier.price} 星光</span></div>
+                  <div className="flex items-center justify-between"><span className="text-muted-foreground">当前余额</span><span className="tabular-nums">{wallet.starlightAvailable ? `${wallet.starlight.toLocaleString()} 星光` : "暂无数据"}</span></div>
+                  <div className="flex items-center justify-between"><span className="text-muted-foreground">购买后余额</span><span className={cn("tabular-nums font-semibold", wallet.starlight - selectedTier.price < 0 && "text-red-600 dark:text-red-300")}>{wallet.starlightAvailable ? `${(wallet.starlight - selectedTier.price).toLocaleString()} 星光` : "—"}</span></div>
+                </div>
+                {wallet.starlightAvailable && wallet.starlight < selectedTier.price && <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300">星光余额不足，还差 {(selectedTier.price - wallet.starlight).toLocaleString()} 星光。</div>}
+                {purchaseError && <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300">{purchaseError}</div>}
+              </div>
+              <DialogFooter>
+                <DialogClose asChild><Button variant="outline" disabled={isPurchasing}>取消</Button></DialogClose>
+                <Button disabled={isPurchasing || (wallet.starlightAvailable && wallet.starlight < selectedTier.price)} onClick={() => void confirmPurchase()}><ShoppingBag />{isPurchasing ? "购买中…" : "确认购买"}</Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <div className="mt-7 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div className="store-tabs">
           <Button variant={activeStore === "afdian" ? "secondary" : "ghost"} onClick={() => setActiveStore("afdian")}><Zap />发电商店</Button>
@@ -809,18 +900,20 @@ function StorePage({ data, isAuthenticated, onRequireLogin }: { data: LauncherBo
 
       {activeItems.length === 0 && <Card className="mt-4"><CardContent className="py-12 text-center text-sm text-muted-foreground">{currencyItems.length === 0 && activeStore === "stardust" ? "星尘商品目录尚未导入 DB_CHALLENGE。" : currencyItems.length === 0 && activeStore === "afdian" ? "暂无可购买的爱发电商品。" : "当前分类没有可展示的商品。"}</CardContent></Card>}
       <div className="store-grid mt-4">
-        {activeItems.map((item) => {
+        {groupedItems.map((group) => {
+          const item = group.tiers[0]
           const Icon = displayIcons[item.icon] ?? Package
           const isAfdianItem = item.purchaseBackend === "afdian-cdk"
+          const minPrice = group.tiers[0].price
           return (
-            <Card key={item.id} className="store-card overflow-hidden">
+            <Card key={group.key} className="store-card overflow-hidden">
               <div className={cn("relative grid h-32 place-items-center overflow-hidden bg-gradient-to-br", item.tone, isAfdianItem ? afdianCategoryTone(item.category) : rarityToneClass(item.tag))}>
                 {isAfdianItem && <><div className="absolute -right-5 -top-8 size-24 rounded-full bg-white/20 blur-2xl" /><div className="absolute -bottom-10 -left-6 size-24 rounded-full bg-black/20 blur-xl" /><div className="absolute inset-x-4 bottom-3 flex items-center justify-between text-[9px] font-semibold uppercase tracking-[0.16em] text-white/65"><span>STARCS</span><span>{item.category || "其他"}</span></div><div className="relative grid size-16 place-items-center rounded-2xl border border-white/25 bg-white/15 shadow-xl backdrop-blur-sm"><Icon className="size-8 text-white" /></div></>}
                 {item.imageUrl ? <img src={item.imageUrl} alt="" className="absolute inset-0 size-full object-cover" onError={(event) => { event.currentTarget.style.display = "none" }} /> : null}
                 {!isAfdianItem && <Icon className="size-12 text-white/90" />}
               </div>
-              <CardHeader><div className="flex items-center justify-between gap-2"><div className="flex min-w-0 gap-1"><Badge variant="secondary">{item.category || "其他"}</Badge>{item.tag && item.tag !== item.category && <Badge variant="outline" className={rarityBadgeClass(item.tag)}>{item.tag}</Badge>}</div><span className="flex items-center gap-1 font-semibold text-primary">{activeStore === "afdian" ? <>¥{item.price}</> : <>{activeStore === "starlight" ? <Sparkles className="size-3.5" /> : <Gem className="size-3.5" />}{item.price}</>}</span></div><CardTitle className="pt-3 text-base">{item.title}</CardTitle><CardDescription>{item.description}</CardDescription></CardHeader>
-              <CardContent><Button className="w-full" variant="outline" onClick={() => void purchase(item)}>{item.purchaseBackend === "afdian-cdk" ? "前往爱发电购买" : !isAuthenticated ? "登录后购买" : item.purchaseBackend === "challenge-stardust" ? "星尘购买" : "星光购买"}</Button></CardContent>
+              <CardHeader><div className="flex items-center justify-between gap-2"><div className="flex min-w-0 gap-1"><Badge variant="secondary">{item.category || "其他"}</Badge>{item.tag && item.tag !== item.category && <Badge variant="outline" className={rarityBadgeClass(item.tag)}>{item.tag}</Badge>}{item.purchaseBackend === "star-product" && (group.tiers.length > 1 ? <Badge variant="outline">{group.tiers.length} 档位</Badge> : <Badge variant="outline">{storeTierLabel(item)}</Badge>)}</div><span className="flex items-center gap-1 font-semibold text-primary">{activeStore === "afdian" ? <>¥{minPrice}</> : <>{activeStore === "starlight" ? <Sparkles className="size-3.5" /> : <Gem className="size-3.5" />}{minPrice}{group.tiers.length > 1 && <span className="text-xs font-normal text-muted-foreground"> 起</span>}</>}</span></div><CardTitle className="pt-3 text-base">{item.title}</CardTitle><CardDescription>{item.description}</CardDescription></CardHeader>
+              <CardContent><Button className="w-full" variant="outline" onClick={() => void purchase(group)}>{item.purchaseBackend === "afdian-cdk" ? "前往爱发电购买" : !isAuthenticated ? "登录后购买" : item.purchaseBackend === "challenge-stardust" ? "星尘购买" : "星光购买"}</Button></CardContent>
             </Card>
           )
         })}
@@ -1201,6 +1294,7 @@ function App() {
   const [authToken, setAuthToken] = useState<string | null>(null)
   const [authenticatedAccount, setAuthenticatedAccount] = useState<LauncherAccount | null>(null)
   const [authenticatedInventory, setAuthenticatedInventory] = useState<LauncherInventoryItem[] | null>(null)
+  const [authenticatedStoreItems, setAuthenticatedStoreItems] = useState<LauncherStoreItem[] | null>(null)
   const [authenticatedEquipment, setAuthenticatedEquipment] = useState<StarLightEquipmentProfile | null>(null)
   const [isEquipmentLoading, setIsEquipmentLoading] = useState(false)
   const [equipmentUnavailableReason, setEquipmentUnavailableReason] = useState<string | null>(null)
@@ -1216,7 +1310,8 @@ function App() {
   const activeAuthToken = useRef<string | null>(null)
   const isAuthenticated = authToken !== null
   const effectiveAccount = isAuthenticated ? authenticatedAccount : bootstrap?.account ?? null
-  const effectiveBootstrap = bootstrap && effectiveAccount ? { ...bootstrap, account: effectiveAccount } : bootstrap
+  const effectiveStoreItems = isAuthenticated && authenticatedStoreItems ? authenticatedStoreItems : bootstrap?.storeItems ?? []
+  const effectiveBootstrap = bootstrap && effectiveAccount ? { ...bootstrap, account: effectiveAccount, storeItems: effectiveStoreItems } : bootstrap
 
   const loadSteamSession = useCallback(async () => {
     setIsSteamAccountLoading(true)
@@ -1302,6 +1397,7 @@ function App() {
       activeAuthToken.current = session.token
       setAuthenticatedAccount(session.account)
       setAuthenticatedInventory(session.inventory)
+      setAuthenticatedStoreItems(session.storeItems)
       setAuthenticatedEquipment(null)
       setEquipmentUnavailableReason(null)
       setPurchaseHistory(session.purchaseHistory)
@@ -1322,6 +1418,7 @@ function App() {
     setAuthToken(null)
     setAuthenticatedAccount(null)
     setAuthenticatedInventory(null)
+    setAuthenticatedStoreItems(null)
     setAuthenticatedEquipment(null)
     setIsEquipmentLoading(false)
     setEquipmentUnavailableReason(null)
@@ -1420,6 +1517,28 @@ function App() {
     return true
   }
 
+  async function applyStorePurchase(item: LauncherStoreItem) {
+    if (!authToken) {
+      openLogin()
+      return false
+    }
+    const pricingId = Number(item.id.replace(/^pricing-/, ""))
+    if (!Number.isFinite(pricingId) || pricingId <= 0) {
+      throw new Error("商品标识无效，暂时无法购买。")
+    }
+    const result = await purchaseStoreItem(authToken, password, pricingId)
+    if (!result.authenticated) {
+      await invalidateAuthentication()
+      return false
+    }
+    // 购买成功后同步最新余额、库存、购买记录与商城列表（永久商品会即时从商城隐藏）
+    setAuthenticatedAccount((current) => current ? { ...current, wallet: { ...current.wallet, starlight: result.starlight, starlightAvailable: true } } : current)
+    setAuthenticatedInventory(result.inventory)
+    setPurchaseHistory(result.purchaseHistory)
+    setAuthenticatedStoreItems(result.storeItems)
+    return true
+  }
+
   return (
     <div className="min-h-screen text-foreground">
       <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} account={steamAccount} isLoading={isSteamAccountLoading} isSubmitting={isLoginSubmitting} accountError={steamAccountError} password={password} rememberPassword={rememberPassword} loginError={loginError} onPasswordChange={setPassword} onRememberPasswordChange={setRememberPassword} onRetry={() => void loadSteamSession()} onLogin={() => void login()} />
@@ -1448,7 +1567,7 @@ function App() {
       </header>
 
       {activeTab === "home" && <HomePage announcements={bootstrap?.announcements ?? []} maps={bootstrap?.maps ?? []} backendError={bootstrapError} isBackendLoading={isBootstrapLoading} onRetryBackend={() => void loadLauncherData()} />}
-      {activeTab === "store" && (effectiveBootstrap ? <StorePage data={effectiveBootstrap} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
+      {activeTab === "store" && (effectiveBootstrap ? <StorePage data={effectiveBootstrap} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} onPurchase={applyStorePurchase} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
       {activeTab === "inventory" && (bootstrap ? <InventoryPage key={isAuthenticated ? effectiveAccount?.profile.userId ?? "authenticated" : "guest"} items={isAuthenticated ? authenticatedInventory ?? [] : []} purchaseHistory={purchaseHistory} equipment={authenticatedEquipment ?? { version: 2, plugin: "star_light_store", modes: {}, unavailableModes: {} }} isAuthenticated={isAuthenticated} isEquipmentLoading={isEquipmentLoading} equipmentUnavailableReason={equipmentUnavailableReason} onRequireLogin={openLogin} onRetryEquipment={() => { if (authToken) void loadAuthenticatedEquipment(authToken, password) }} onEquipmentOperation={applyEquipmentOperation} onStardustOperation={applyStardustOperation} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
       {activeTab === "profile" && <ProfilePage account={effectiveAccount} purchaseHistory={purchaseHistory} seasonPass={seasonPass} penalties={penalties} steamAccount={steamAccount} isAuthenticated={isAuthenticated} theme={theme} onThemeChange={setTheme} onLogin={openLogin} onLogout={logout} />}
     </div>

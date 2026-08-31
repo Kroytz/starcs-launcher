@@ -169,6 +169,10 @@ struct LauncherStoreItem {
     title: String,
     description: String,
     price: i64,
+    #[serde(default)]
+    days: i32,
+    #[serde(default)]
+    quantity: i32,
     icon: String,
     tone: String,
     tag: String,
@@ -221,6 +225,8 @@ struct LauncherLoginSession {
     purchase_history: Vec<LauncherPurchaseHistoryItem>,
     season_pass: LauncherSeasonPass,
     penalties: Vec<LauncherPenalty>,
+    #[serde(default)]
+    store_items: Vec<LauncherStoreItem>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -326,6 +332,24 @@ struct LauncherEquipmentCommandResult {
 struct StardustEquipmentMutationRequest {
     item_type: String,
     unique_id: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StarlightPurchaseRequest {
+    pricing_id: i64,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PurchaseCommandResult {
+    #[serde(default)]
+    authenticated: bool,
+    starlight: i64,
+    inventory: Vec<LauncherInventoryItem>,
+    purchase_history: Vec<LauncherPurchaseHistoryItem>,
+    #[serde(default)]
+    store_items: Vec<LauncherStoreItem>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -660,6 +684,52 @@ async fn update_stardust_equipment(
     })
 }
 
+#[tauri::command]
+async fn purchase_store_item(
+    token: String,
+    password: String,
+    pricing_id: i64,
+) -> Result<PurchaseCommandResult, String> {
+    let backend_url = std::env::var("STAR_LAUNCHER_BACKEND_URL")
+        .unwrap_or_else(|_| DEFAULT_LAUNCHER_BACKEND_URL.to_string());
+    let request_url = format!(
+        "{}/api/v1/me/store/purchase",
+        backend_url.trim_end_matches('/')
+    );
+    let response = reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .build()
+        .map_err(|error| format!("创建购买请求客户端失败：{error}"))?
+        .post(&request_url)
+        .bearer_auth(token)
+        .header("X-StarCS-Reauth", password)
+        .json(&StarlightPurchaseRequest { pricing_id })
+        .send()
+        .await
+        .map_err(|error| format!("连接商城服务失败（{request_url}）：{error}"))?;
+
+    let status = response.status();
+    let payload = response
+        .json::<OptionalApiEnvelope<PurchaseCommandResult>>()
+        .await
+        .map_err(|error| format!("解析购买响应失败：{error}"))?;
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return Ok(PurchaseCommandResult {
+            authenticated: false,
+            starlight: 0,
+            inventory: Vec::new(),
+            purchase_history: Vec::new(),
+            store_items: Vec::new(),
+        });
+    }
+    if !status.is_success() || payload.code != 2000 {
+        return Err(payload.msg);
+    }
+    let mut result = payload.data.ok_or_else(|| "购买响应缺少数据".to_string())?;
+    result.authenticated = true;
+    Ok(result)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -673,6 +743,7 @@ pub fn run() {
             fetch_launcher_equipment,
             update_launcher_equipment,
             update_stardust_equipment,
+            purchase_store_item,
             steam::get_local_steam_account,
             steam::load_remembered_password,
             steam::update_remembered_password,

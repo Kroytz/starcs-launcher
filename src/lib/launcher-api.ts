@@ -57,6 +57,8 @@ export type LauncherStoreItem = {
   title: string
   description: string
   price: number
+  days: number
+  quantity: number
   icon: string
   tone: string
   tag: string
@@ -123,6 +125,7 @@ export type LauncherLoginSession = {
   purchaseHistory: LauncherPurchaseHistoryItem[]
   seasonPass: LauncherSeasonPass
   penalties: LauncherPenalty[]
+  storeItems: LauncherStoreItem[]
 }
 
 export type LauncherProfile = {
@@ -249,4 +252,16 @@ export type StardustEquipmentCommandResult = {
 
 export async function updateStardustEquipment(token: string, password: string, itemType: string, uniqueId: string, equip: boolean) {
   return invoke<StardustEquipmentCommandResult>("update_stardust_equipment", { token, password, itemType, uniqueId, equip })
+}
+
+export type PurchaseCommandResult = {
+  authenticated: boolean
+  starlight: number
+  inventory: LauncherInventoryItem[]
+  purchaseHistory: LauncherPurchaseHistoryItem[]
+  storeItems: LauncherStoreItem[]
+}
+
+export async function purchaseStoreItem(token: string, password: string, pricingId: number) {
+  return invoke<PurchaseCommandResult>("purchase_store_item", { token, password, pricingId })
 }
