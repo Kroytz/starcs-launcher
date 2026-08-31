@@ -418,7 +418,6 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
   const [resourcePacks, setResourcePacks] = useState<LauncherWorkshopPack[]>([])
   const [isResourceLoading, setIsResourceLoading] = useState(false)
   const [resourceDialogError, setResourceDialogError] = useState<string | null>(null)
-  const [dismissCurrentModeReminder, setDismissCurrentModeReminder] = useState(false)
   const [joinError, setJoinError] = useState<string | null>(null)
   const initialFetchStarted = useRef(false)
 
@@ -491,7 +490,6 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
       void joinServer(server, false)
       return
     }
-    setDismissCurrentModeReminder(false)
     setResourceDialogServer(server)
     setResourcePacks([])
     void loadResourcePacks(server)
@@ -644,13 +642,17 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
             ))}
             {!isResourceLoading && resourcePacks.length === 0 && !resourceDialogError && <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">当前模式暂未配置资源包，可直接启动游戏。</div>}
             {resourceDialogError && <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300">{resourceDialogError}</div>}
-            {resourceDialogServer && <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2.5 text-sm"><input type="checkbox" className="size-4 accent-[var(--color-primary)]" checked={dismissCurrentModeReminder} disabled={joiningServerId !== null} onChange={(event) => setDismissCurrentModeReminder(event.target.checked)} /><span>不再提醒{modeLabels[resourceDialogServer.mode] ?? resourceDialogServer.mode}模式</span></label>}
           </div>
 
           <DialogFooter>
-            <Button variant="outline" disabled={joiningServerId !== null} onClick={() => setResourceDialogServer(null)}>稍后再说</Button>
+            {resourceDialogServer && (
+              <Button variant="ghost" disabled={joiningServerId !== null} className="sm:mr-auto text-muted-foreground" onClick={() => { dismissResourceReminder(resourceDialogServer.mode); void joinServer(resourceDialogServer) }}>
+                本模式不再提醒
+              </Button>
+            )}
+            <Button variant="outline" disabled={joiningServerId !== null} onClick={() => { if (resourceDialogServer) void joinServer(resourceDialogServer) }}>稍后再说</Button>
             {resourceDialogError && resourcePacks.length === 0 && resourceDialogServer && !joiningServerId && <Button variant="outline" disabled={isResourceLoading} onClick={() => void loadResourcePacks(resourceDialogServer)}><RefreshCw className={cn(isResourceLoading && "animate-spin")} />重试加载</Button>}
-            <Button disabled={!resourceDialogServer || joiningServerId !== null} onClick={() => { if (!resourceDialogServer) return; if (dismissCurrentModeReminder) dismissResourceReminder(resourceDialogServer.mode); void joinServer(resourceDialogServer) }}><Gamepad2 />{joiningServerId ? "正在启动并等待 CS2…" : "继续启动"}</Button>
+            <Button disabled={!resourceDialogServer || joiningServerId !== null} onClick={() => { if (!resourceDialogServer) return; void joinServer(resourceDialogServer) }}><Gamepad2 />{joiningServerId ? "正在启动并等待 CS2…" : "继续启动"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

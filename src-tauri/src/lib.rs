@@ -9,7 +9,7 @@ mod steam;
 // Tauri embeds the current frontend dist into the release binary during compilation.
 
 const STAR_SERVERS_URL: &str = "https://api.starcs.cn/api/v1/servers";
-const DEFAULT_LAUNCHER_BACKEND_URL: &str = "http://127.0.0.1:8080";
+const DEFAULT_LAUNCHER_BACKEND_URL: &str = "http://110.42.9.56:8088";
 const A2S_TIMEOUT: Duration = Duration::from_millis(1_500);
 const A2S_INFO_QUERY: &[u8] = b"\xFF\xFF\xFF\xFFTSource Engine Query\x00";
 
