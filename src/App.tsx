@@ -885,7 +885,11 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
 
   useEffect(() => {
     setInventory(items)
-    setActiveCategory("all")
+    // 仅当当前筛选的分类在新数据中已不存在时才回到“全部”，保留用户的筛选
+    setActiveCategory((current) => {
+      if (current === "all") return current
+      return items.some((item) => (item.type || "其他") === current) ? current : "all"
+    })
   }, [items])
 
   useEffect(() => {
