@@ -179,6 +179,8 @@ struct LauncherStoreItem {
     enabled: bool,
     sort: i32,
     image_url: String,
+    #[serde(default)]
+    stardust_type: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -348,6 +350,17 @@ struct PurchaseCommandResult {
     starlight: i64,
     inventory: Vec<LauncherInventoryItem>,
     purchase_history: Vec<LauncherPurchaseHistoryItem>,
+    #[serde(default)]
+    store_items: Vec<LauncherStoreItem>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StardustPurchaseCommandResult {
+    #[serde(default)]
+    authenticated: bool,
+    stardust: i64,
+    inventory: Vec<LauncherInventoryItem>,
     #[serde(default)]
     store_items: Vec<LauncherStoreItem>,
 }
@@ -730,6 +743,55 @@ async fn purchase_store_item(
     Ok(result)
 }
 
+#[tauri::command]
+async fn purchase_stardust_item(
+    token: String,
+    password: String,
+    item_type: String,
+    unique_id: String,
+) -> Result<StardustPurchaseCommandResult, String> {
+    let backend_url = std::env::var("STAR_LAUNCHER_BACKEND_URL")
+        .unwrap_or_else(|_| DEFAULT_LAUNCHER_BACKEND_URL.to_string());
+    let request_url = format!(
+        "{}/api/v1/me/stardust/purchase",
+        backend_url.trim_end_matches('/')
+    );
+    let response = reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .build()
+        .map_err(|error| format!("创建星尘购买请求客户端失败：{error}"))?
+        .post(&request_url)
+        .bearer_auth(token)
+        .header("X-StarCS-Reauth", password)
+        .json(&StardustEquipmentMutationRequest {
+            item_type,
+            unique_id,
+        })
+        .send()
+        .await
+        .map_err(|error| format!("连接星尘商店服务失败（{request_url}）：{error}"))?;
+
+    let status = response.status();
+    let payload = response
+        .json::<OptionalApiEnvelope<StardustPurchaseCommandResult>>()
+        .await
+        .map_err(|error| format!("解析星尘购买响应失败：{error}"))?;
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return Ok(StardustPurchaseCommandResult {
+            authenticated: false,
+            stardust: 0,
+            inventory: Vec::new(),
+            store_items: Vec::new(),
+        });
+    }
+    if !status.is_success() || payload.code != 2000 {
+        return Err(payload.msg);
+    }
+    let mut result = payload.data.ok_or_else(|| "购买响应缺少数据".to_string())?;
+    result.authenticated = true;
+    Ok(result)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -744,6 +806,7 @@ pub fn run() {
             update_launcher_equipment,
             update_stardust_equipment,
             purchase_store_item,
+            purchase_stardust_item,
             steam::get_local_steam_account,
             steam::load_remembered_password,
             steam::update_remembered_password,

@@ -65,6 +65,7 @@ export type LauncherStoreItem = {
   enabled: boolean
   sort: number
   imageUrl: string
+  stardustType?: string
 }
 
 export type LauncherInventoryItem = {
@@ -264,4 +265,15 @@ export type PurchaseCommandResult = {
 
 export async function purchaseStoreItem(token: string, password: string, pricingId: number) {
   return invoke<PurchaseCommandResult>("purchase_store_item", { token, password, pricingId })
+}
+
+export type StardustPurchaseCommandResult = {
+  authenticated: boolean
+  stardust: number
+  inventory: LauncherInventoryItem[]
+  storeItems: LauncherStoreItem[]
+}
+
+export async function purchaseStardustItem(token: string, password: string, itemType: string, uniqueId: string) {
+  return invoke<StardustPurchaseCommandResult>("purchase_stardust_item", { token, password, itemType, uniqueId })
 }

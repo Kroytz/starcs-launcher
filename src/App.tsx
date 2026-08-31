@@ -92,6 +92,7 @@ import {
   fetchLauncherEquipment,
   fetchLauncherWorkshopPacks,
   loginLauncherAccount,
+  purchaseStardustItem,
   purchaseStoreItem,
   updateLauncherEquipment,
   updateStardustEquipment,
@@ -707,6 +708,10 @@ function StorePage({ data, isAuthenticated, onRequireLogin, onPurchase }: { data
     group.tiers.sort((a, b) => a.price - b.price || a.days - b.days || a.quantity - b.quantity)
   }
   const selectedTier = purchaseTarget?.find((tier) => tier.id === purchaseTierId) ?? purchaseTarget?.[0] ?? null
+  const purchaseIsStardust = selectedTier?.purchaseBackend === "challenge-stardust"
+  const purchaseCurrencyLabel = purchaseIsStardust ? "星尘" : "星光"
+  const purchaseBalance = purchaseIsStardust ? data.account.wallet.stardust : data.account.wallet.starlight
+  const purchaseBalanceAvailable = purchaseIsStardust ? data.account.wallet.stardustAvailable : data.account.wallet.starlightAvailable
   const wallet = data.account.wallet
   const activeBalance = activeStore === "starlight" ? wallet.starlight : activeStore === "stardust" ? wallet.stardust : 0
   const activeBalanceAvailable = activeStore === "starlight" ? wallet.starlightAvailable : activeStore === "stardust" ? wallet.stardustAvailable : false
@@ -775,13 +780,9 @@ function StorePage({ data, isAuthenticated, onRequireLogin, onPurchase }: { data
       onRequireLogin()
       return
     }
-    if (item.purchaseBackend === "star-product") {
-      setPurchaseError(null)
-      setPurchaseTierId(null)
-      setPurchaseTarget(group.tiers)
-      return
-    }
-    setStoreNotice(`「${item.title}」在 星尘商店 的购买暂未开放。`)
+    setPurchaseError(null)
+    setPurchaseTierId(null)
+    setPurchaseTarget(group.tiers)
   }
 
   async function confirmPurchase() {
@@ -847,7 +848,7 @@ function StorePage({ data, isAuthenticated, onRequireLogin, onPurchase }: { data
         <DialogContent showCloseButton={!isPurchasing}>
           {purchaseTarget && selectedTier && (
             <>
-              <DialogHeader><DialogTitle className="flex items-center gap-2"><Sparkles className="size-5 text-primary" />确认购买</DialogTitle><DialogDescription>购买后立即发放到游戏内库存，可在库存页查看。</DialogDescription></DialogHeader>
+              <DialogHeader><DialogTitle className="flex items-center gap-2">{purchaseIsStardust ? <Gem className="size-5 text-secondary" /> : <Sparkles className="size-5 text-primary" />}确认购买</DialogTitle><DialogDescription>购买后立即发放到游戏内库存，可在库存页查看。</DialogDescription></DialogHeader>
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 px-4 py-3"><span className="min-w-0 truncate font-medium">{purchaseTarget[0].title}</span><Badge variant="secondary">{purchaseTarget[0].category || "其他"}</Badge></div>
                 {purchaseTarget.length > 1 && (
@@ -855,23 +856,23 @@ function StorePage({ data, isAuthenticated, onRequireLogin, onPurchase }: { data
                     {purchaseTarget.map((tier) => (
                       <button key={tier.id} type="button" aria-pressed={selectedTier.id === tier.id} onClick={() => setPurchaseTierId(tier.id)} className={cn("flex items-center justify-between rounded-lg border px-4 py-2.5 text-sm transition-colors", selectedTier.id === tier.id ? "border-primary bg-primary/10" : "border-border hover:bg-muted/40")}>
                         <span className="flex items-center gap-2">{selectedTier.id === tier.id && <Check className="size-4 text-primary" />}{storeTierLabel(tier)}</span>
-                        <span className="flex items-center gap-1.5 font-semibold"><Sparkles className="size-4 text-primary" />{tier.price}</span>
+                        <span className="flex items-center gap-1.5 font-semibold">{purchaseIsStardust ? <Gem className="size-4 text-secondary" /> : <Sparkles className="size-4 text-primary" />}{tier.price}</span>
                       </button>
                     ))}
                   </div>
                 )}
                 <div className="space-y-2 rounded-xl border border-border px-4 py-3 text-sm">
                   <div className="flex items-center justify-between"><span className="text-muted-foreground">期限</span><span className="font-medium">{storeTierLabel(selectedTier)}{selectedTier.days > 0 && selectedTier.quantity <= 1 ? "（重复购买时长累加）" : ""}</span></div>
-                  <div className="flex items-center justify-between"><span className="text-muted-foreground">价格</span><span className="flex items-center gap-1.5 font-semibold"><Sparkles className="size-4 text-primary" />{selectedTier.price} 星光</span></div>
-                  <div className="flex items-center justify-between"><span className="text-muted-foreground">当前余额</span><span className="tabular-nums">{wallet.starlightAvailable ? `${wallet.starlight.toLocaleString()} 星光` : "暂无数据"}</span></div>
-                  <div className="flex items-center justify-between"><span className="text-muted-foreground">购买后余额</span><span className={cn("tabular-nums font-semibold", wallet.starlight - selectedTier.price < 0 && "text-red-600 dark:text-red-300")}>{wallet.starlightAvailable ? `${(wallet.starlight - selectedTier.price).toLocaleString()} 星光` : "—"}</span></div>
+                  <div className="flex items-center justify-between"><span className="text-muted-foreground">价格</span><span className="flex items-center gap-1.5 font-semibold">{purchaseIsStardust ? <Gem className="size-4 text-secondary" /> : <Sparkles className="size-4 text-primary" />}{selectedTier.price} {purchaseCurrencyLabel}</span></div>
+                  <div className="flex items-center justify-between"><span className="text-muted-foreground">当前余额</span><span className="tabular-nums">{purchaseBalanceAvailable ? `${purchaseBalance.toLocaleString()} ${purchaseCurrencyLabel}` : "暂无数据"}</span></div>
+                  <div className="flex items-center justify-between"><span className="text-muted-foreground">购买后余额</span><span className={cn("tabular-nums font-semibold", purchaseBalance - selectedTier.price < 0 && "text-red-600 dark:text-red-300")}>{purchaseBalanceAvailable ? `${(purchaseBalance - selectedTier.price).toLocaleString()} ${purchaseCurrencyLabel}` : "—"}</span></div>
                 </div>
-                {wallet.starlightAvailable && wallet.starlight < selectedTier.price && <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300">星光余额不足，还差 {(selectedTier.price - wallet.starlight).toLocaleString()} 星光。</div>}
+                {purchaseBalanceAvailable && purchaseBalance < selectedTier.price && <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300">{purchaseCurrencyLabel}余额不足，还差 {(selectedTier.price - purchaseBalance).toLocaleString()} {purchaseCurrencyLabel}。</div>}
                 {purchaseError && <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300">{purchaseError}</div>}
               </div>
               <DialogFooter>
                 <DialogClose asChild><Button variant="outline" disabled={isPurchasing}>取消</Button></DialogClose>
-                <Button disabled={isPurchasing || (wallet.starlightAvailable && wallet.starlight < selectedTier.price)} onClick={() => void confirmPurchase()}><ShoppingBag />{isPurchasing ? "购买中…" : "确认购买"}</Button>
+                <Button disabled={isPurchasing || (purchaseBalanceAvailable && purchaseBalance < selectedTier.price)} onClick={() => void confirmPurchase()}><ShoppingBag />{isPurchasing ? "购买中…" : "确认购买"}</Button>
               </DialogFooter>
             </>
           )}
@@ -1521,6 +1522,21 @@ function App() {
     if (!authToken) {
       openLogin()
       return false
+    }
+    if (item.purchaseBackend === "challenge-stardust") {
+      if (!item.stardustType || !item.externalId) {
+        throw new Error("商品标识无效，暂时无法购买。")
+      }
+      const result = await purchaseStardustItem(authToken, password, item.stardustType, item.externalId)
+      if (!result.authenticated) {
+        await invalidateAuthentication()
+        return false
+      }
+      // 星尘购买成功后同步最新余额、库存与商城列表（已购星尘物品会即时从商城隐藏）
+      setAuthenticatedAccount((current) => current ? { ...current, wallet: { ...current.wallet, stardust: result.stardust, stardustAvailable: true } } : current)
+      setAuthenticatedInventory(result.inventory)
+      setAuthenticatedStoreItems(result.storeItems)
+      return true
     }
     const pricingId = Number(item.id.replace(/^pricing-/, ""))
     if (!Number.isFinite(pricingId) || pricingId <= 0) {
