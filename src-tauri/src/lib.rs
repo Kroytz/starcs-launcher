@@ -255,6 +255,25 @@ struct LauncherWorkshopPack {
     steam_url: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LauncherUpdatePolicyPayload {
+    version: String,
+    mandatory: bool,
+    changelog: String,
+    pub_date: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LauncherUpdatePolicy {
+    current_version: String,
+    latest_version: String,
+    mandatory: bool,
+    changelog: String,
+    pub_date: String,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct LauncherPurchaseHistoryItem {
@@ -507,6 +526,40 @@ async fn fetch_launcher_workshop_packs(
         return Err(format!("资源包接口错误：{}", response.msg));
     }
     Ok(response.data)
+}
+
+#[tauri::command]
+async fn fetch_launcher_update_policy() -> Result<LauncherUpdatePolicy, String> {
+    let backend_url = std::env::var("STAR_LAUNCHER_BACKEND_URL")
+        .unwrap_or_else(|_| DEFAULT_LAUNCHER_BACKEND_URL.to_string());
+    let request_url = format!(
+        "{}/api/v1/launcher/update-policy",
+        backend_url.trim_end_matches('/')
+    );
+    let response = reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .build()
+        .map_err(|error| format!("创建更新策略请求客户端失败：{error}"))?
+        .get(&request_url)
+        .send()
+        .await
+        .map_err(|error| format!("连接更新策略服务失败（{request_url}）：{error}"))?
+        .error_for_status()
+        .map_err(|error| format!("更新策略服务返回 HTTP 错误：{error}"))?
+        .json::<ApiEnvelope<LauncherUpdatePolicyPayload>>()
+        .await
+        .map_err(|error| format!("解析更新策略数据失败：{error}"))?;
+
+    if response.code != 2000 {
+        return Err(format!("更新策略接口错误：{}", response.msg));
+    }
+    Ok(LauncherUpdatePolicy {
+        current_version: env!("CARGO_PKG_VERSION").to_string(),
+        latest_version: response.data.version,
+        mandatory: response.data.mandatory,
+        changelog: response.data.changelog,
+        pub_date: response.data.pub_date,
+    })
 }
 
 #[tauri::command]
@@ -796,10 +849,13 @@ async fn purchase_stardust_item(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
             fetch_star_servers,
             fetch_launcher_bootstrap,
             fetch_launcher_workshop_packs,
+            fetch_launcher_update_policy,
             login_launcher_account,
             verify_launcher_password,
             fetch_launcher_equipment,

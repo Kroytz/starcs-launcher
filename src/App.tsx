@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { getVersion } from "@tauri-apps/api/app"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { openUrl } from "@tauri-apps/plugin-opener"
 import type { LucideIcon } from "lucide-react"
@@ -60,6 +61,7 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
+import { UpdateDialog, type UpdateDialogState } from "@/components/UpdateDialog"
 import { cn } from "@/lib/utils"
 import {
   applyTheme,
@@ -87,6 +89,12 @@ import {
   type ServerStatus,
 } from "@/lib/servers"
 import { dismissResourceReminder, isResourceReminderDismissed } from "@/lib/resource-reminder"
+import {
+  checkLauncherUpdate,
+  consumePendingUpdateChangelog,
+  fetchLauncherUpdatePolicy,
+  type LauncherUpdatePolicy,
+} from "@/lib/updater"
 import {
   fetchLauncherBootstrap,
   fetchLauncherEquipment,
@@ -1244,11 +1252,63 @@ function formatRemainingTime(expiresAt: string) {
   return `${days} 天`
 }
 
-function ProfilePage({ account, purchaseHistory, seasonPass, penalties, steamAccount, isAuthenticated, theme, onThemeChange, onLogin, onLogout }: { account: LauncherAccount | null; purchaseHistory: LauncherPurchaseHistoryItem[]; seasonPass: LauncherSeasonPass | null; penalties: LauncherPenalty[]; steamAccount: LocalSteamAccount | null; isAuthenticated: boolean; theme: ThemePreference; onThemeChange: (theme: ThemePreference) => void; onLogin: () => void; onLogout: () => void }) {
+function SeasonPassTask({ title, current, milestones, unit }: { title: string; current: number; milestones: number[]; unit: string }) {
+  const max = milestones[milestones.length - 1] ?? 1
+  const clamped = Math.min(Math.max(current, 0), max)
+  const nextMilestone = milestones.find((milestone) => current < milestone)
+  return (
+    <div className="rounded-lg border border-border bg-muted/25 p-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-sm font-medium">{title}</span>
+        <span className="text-xs text-muted-foreground">
+          <span className="font-semibold text-foreground">{clamped}</span>/{max} {unit}
+          {nextMilestone !== undefined && <span className="ml-1.5">· 下一档 {nextMilestone}</span>}
+        </span>
+      </div>
+      <div className="relative mt-2.5">
+        <Progress value={(clamped / max) * 100} />
+        {milestones.map((milestone) => (
+          <span
+            key={milestone}
+            className={cn(
+              "absolute top-1/2 size-2 -translate-y-1/2 rounded-full border",
+              milestone === max ? "-translate-x-full" : "-translate-x-1/2",
+              current >= milestone ? "border-primary bg-primary" : "border-border bg-background",
+            )}
+            style={{ left: `${(milestone / max) * 100}%` }}
+          />
+        ))}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {milestones.map((milestone) => (
+          <span key={milestone} className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]", current >= milestone ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground")}>
+            {current >= milestone && <Check className="size-2.5" />}
+            {milestone} {unit}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ProfilePage({ account, purchaseHistory, seasonPass, penalties, steamAccount, isAuthenticated, theme, onThemeChange, onLogin, onLogout, onCheckUpdate }: { account: LauncherAccount | null; purchaseHistory: LauncherPurchaseHistoryItem[]; seasonPass: LauncherSeasonPass | null; penalties: LauncherPenalty[]; steamAccount: LocalSteamAccount | null; isAuthenticated: boolean; theme: ThemePreference; onThemeChange: (theme: ThemePreference) => void; onLogin: () => void; onLogout: () => void; onCheckUpdate: () => Promise<"found" | "latest" | "error"> }) {
   const profile = account?.profile ?? null
   const displayName = isAuthenticated ? steamAccount?.personaName || profile?.displayName || "StarCS 玩家" : "未登录"
   const avatarUrl = steamAccount?.avatarDataUrl || profile?.avatarUrl || starLogo
   const wallet = account?.wallet
+  const [appVersion, setAppVersion] = useState("")
+  const [updateCheckState, setUpdateCheckState] = useState<"idle" | "checking" | "latest" | "error">("idle")
+
+  useEffect(() => {
+    void getVersion().then(setAppVersion).catch(() => {})
+  }, [])
+
+  const handleCheckUpdate = async () => {
+    setUpdateCheckState("checking")
+    const result = await onCheckUpdate()
+    // "found" 时更新弹窗已接管，这里不需要额外提示
+    setUpdateCheckState(result === "found" ? "idle" : result === "latest" ? "latest" : "error")
+  }
 
   return (
     <main className="page-shell">
@@ -1274,7 +1334,20 @@ function ProfilePage({ account, purchaseHistory, seasonPass, penalties, steamAcc
             <CardContent className="space-y-3"><div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-4"><div><div className="text-sm font-medium">{isAuthenticated ? `Steam ${profile?.steamConnected ? "已连接" : "未连接"}` : "尚未登录 StarCS"}</div><div className="mt-1 text-xs text-muted-foreground">{isAuthenticated && steamAccount ? `${steamAccount.personaName} · ${steamAccount.steamId}` : "点击登录后识别当前 Steam Session"}</div></div><Badge variant={isAuthenticated && profile?.steamConnected && penalties.length === 0 ? "success" : "outline"}>{isAuthenticated && profile?.steamConnected && penalties.length === 0 && <Check />}{!isAuthenticated ? "未登录" : penalties.length > 0 ? `${penalties.length} 条处罚` : profile?.steamConnected ? "正常" : "待连接"}</Badge></div>{penalties.map((penalty, index) => <div key={`${penalty.type}-${penalty.createdAt}-${index}`} className="rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm"><div className="flex justify-between gap-3"><span className="font-medium text-red-600 dark:text-red-300">{penalty.type || "账户处罚"}</span><span className="text-xs text-muted-foreground">{penalty.permanent ? "永久" : `至 ${formatLauncherDate(penalty.expiresAt)}`}</span></div><div className="mt-1 text-xs text-muted-foreground">{penalty.reason || "未提供原因"}{penalty.mode ? ` · ${penalty.mode}` : ""}</div></div>)}</CardContent>
           </Card>
 
-          {isAuthenticated && seasonPass?.available && <Card><CardHeader><div className="flex items-center gap-3"><div className="setting-icon"><Trophy /></div><div><CardTitle>赛季通行证 · 第 {seasonPass.seasonId} 赛季</CardTitle><CardDescription>真实赛季进度，最近更新于 {formatLauncherDate(seasonPass.updatedAt)}。</CardDescription></div></div></CardHeader><CardContent><div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">Lv. {seasonPass.level}</div><div className="text-xs text-muted-foreground">通行证等级</div></div><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">{seasonPass.experience}</div><div className="text-xs text-muted-foreground">经验</div></div><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">{seasonPass.claimedRewardCount}</div><div className="text-xs text-muted-foreground">已领礼包</div></div><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">{seasonPass.starSourceChestOpened}</div><div className="text-xs text-muted-foreground">已开宝箱</div></div></div><div className="mt-3 grid grid-cols-2 gap-3 text-sm"><div className="rounded-lg border border-border px-3 py-2"><span className="text-muted-foreground">今日游戏</span><span className="float-right font-medium">{seasonPass.dailyGames} 局 / {seasonPass.dailyOnlineMinutes} 分钟</span></div><div className="rounded-lg border border-border px-3 py-2"><span className="text-muted-foreground">本周进度</span><span className="float-right font-medium">{seasonPass.weeklyGames} 局 / {seasonPass.weeklyCompletedModes} 模式</span></div></div></CardContent></Card>}
+          {isAuthenticated && seasonPass?.available && <Card><CardHeader><div className="flex items-center gap-3"><div className="setting-icon"><Trophy /></div><div><CardTitle>赛季通行证 · 第 {seasonPass.seasonId} 赛季</CardTitle><CardDescription>真实赛季进度，最近更新于 {formatLauncherDate(seasonPass.updatedAt)}。</CardDescription></div></div></CardHeader><CardContent><div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">Lv. {seasonPass.level}</div><div className="text-xs text-muted-foreground">通行证等级</div></div><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">{seasonPass.experience}</div><div className="text-xs text-muted-foreground">经验</div></div><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">{seasonPass.claimedRewardCount}</div><div className="text-xs text-muted-foreground">已领礼包</div></div><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">{seasonPass.starSourceChestOpened}</div><div className="text-xs text-muted-foreground">已开宝箱</div></div></div><div className="mt-4 space-y-4"><div><div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">每日任务</div><div className="grid gap-3 sm:grid-cols-2"><SeasonPassTask title="游玩对局" current={seasonPass.dailyGames} milestones={[1, 3, 5]} unit="局" /><SeasonPassTask title="在线时长" current={seasonPass.dailyOnlineMinutes} milestones={[10, 30, 60]} unit="分钟" /></div></div><div><div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">每周任务</div><div className="grid gap-3 sm:grid-cols-2"><SeasonPassTask title="游玩对局" current={seasonPass.weeklyGames} milestones={[1, 5, 10]} unit="局" /><SeasonPassTask title="不同模式" current={seasonPass.weeklyCompletedModes} milestones={[3]} unit="种模式" /></div></div></div></CardContent></Card>}
+
+          <Card>
+            <CardHeader><div className="flex items-center gap-3"><div className="setting-icon"><Info /></div><div><CardTitle>关于 STAR Launcher</CardTitle><CardDescription>查看当前版本，或手动检查更新。</CardDescription></div></div></CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-4">
+                <div>
+                  <div className="text-sm font-medium">当前版本 v{appVersion || "—"}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">{updateCheckState === "checking" ? "正在检查更新…" : updateCheckState === "latest" ? "已是最新版本。" : updateCheckState === "error" ? "检查失败，请稍后重试。" : "有更新时会在这里提示，也可手动检查。"}</div>
+                </div>
+                <Button variant="outline" size="sm" disabled={updateCheckState === "checking"} onClick={() => void handleCheckUpdate()}><RefreshCw className={updateCheckState === "checking" ? "animate-spin" : undefined} />检查更新</Button>
+              </div>
+            </CardContent>
+          </Card>
 
         </div>
       </div>
@@ -1308,6 +1381,8 @@ function App() {
   const [isBootstrapLoading, setIsBootstrapLoading] = useState(true)
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
   const bootstrapFetchStarted = useRef(false)
+  const updateCheckStarted = useRef(false)
+  const [updateDialog, setUpdateDialog] = useState<UpdateDialogState | null>(null)
   const activeAuthToken = useRef<string | null>(null)
   const isAuthenticated = authToken !== null
   const effectiveAccount = isAuthenticated ? authenticatedAccount : bootstrap?.account ?? null
@@ -1358,6 +1433,51 @@ function App() {
     bootstrapFetchStarted.current = true
     void loadLauncherData()
   }, [loadLauncherData])
+
+  // 启动时检查更新：刚更新完 → 展示本次 changelog；发现新版本 → 按策略弹普通/强制更新。
+  // 任何环节失败都只记录日志，绝不阻塞启动。
+  useEffect(() => {
+    if (updateCheckStarted.current) return
+    updateCheckStarted.current = true
+    void (async () => {
+      try {
+        if (await consumePendingUpdateChangelog()) {
+          const policy = await fetchLauncherUpdatePolicy()
+          setUpdateDialog({ mode: "completed", changelog: policy.changelog, version: policy.currentVersion })
+          return
+        }
+      } catch (error) {
+        console.error("[StarCS Launcher] 读取更新完成状态失败", error)
+      }
+      void runUpdateCheck()
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 返回 "found"（弹窗）/"latest"（已是最新）/"error"；策略接口失败时降级为普通更新并用 manifest 自带说明。
+  async function runUpdateCheck(): Promise<"found" | "latest" | "error"> {
+    try {
+      const update = await checkLauncherUpdate()
+      if (!update) return "latest"
+      let policy: LauncherUpdatePolicy
+      try {
+        policy = await fetchLauncherUpdatePolicy()
+      } catch {
+        policy = {
+          currentVersion: update.currentVersion,
+          latestVersion: update.version,
+          mandatory: false,
+          changelog: update.body ?? "",
+          pubDate: update.date ?? "",
+        }
+      }
+      setUpdateDialog({ mode: policy.mandatory ? "mandatory" : "optional", policy, update })
+      return "found"
+    } catch (error) {
+      console.error("[StarCS Launcher] 检查更新失败", error)
+      return "error"
+    }
+  }
 
   useEffect(() => {
     saveThemePreference(theme)
@@ -1558,6 +1678,7 @@ function App() {
   return (
     <div className="app-root text-foreground">
       <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} account={steamAccount} isLoading={isSteamAccountLoading} isSubmitting={isLoginSubmitting} accountError={steamAccountError} password={password} rememberPassword={rememberPassword} loginError={loginError} onPasswordChange={setPassword} onRememberPasswordChange={setRememberPassword} onRetry={() => void loadSteamSession()} onLogin={() => void login()} />
+      <UpdateDialog state={updateDialog} onClose={() => setUpdateDialog(null)} />
       <header className="app-header" data-tauri-drag-region>
         <button className="brand" onClick={() => setActiveTab("home")} aria-label="返回首页">
           <img src={starLogo} alt="StarCS" className="brand-logo" />
@@ -1586,7 +1707,7 @@ function App() {
         {activeTab === "home" && <HomePage announcements={bootstrap?.announcements ?? []} maps={bootstrap?.maps ?? []} backendError={bootstrapError} isBackendLoading={isBootstrapLoading} onRetryBackend={() => void loadLauncherData()} />}
         {activeTab === "store" && (effectiveBootstrap ? <StorePage data={effectiveBootstrap} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} onPurchase={applyStorePurchase} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
         {activeTab === "inventory" && (bootstrap ? <InventoryPage key={isAuthenticated ? effectiveAccount?.profile.userId ?? "authenticated" : "guest"} items={isAuthenticated ? authenticatedInventory ?? [] : []} purchaseHistory={purchaseHistory} equipment={authenticatedEquipment ?? { version: 2, plugin: "star_light_store", modes: {}, unavailableModes: {} }} isAuthenticated={isAuthenticated} isEquipmentLoading={isEquipmentLoading} equipmentUnavailableReason={equipmentUnavailableReason} onRequireLogin={openLogin} onRetryEquipment={() => { if (authToken) void loadAuthenticatedEquipment(authToken, password) }} onEquipmentOperation={applyEquipmentOperation} onStardustOperation={applyStardustOperation} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
-        {activeTab === "profile" && <ProfilePage account={effectiveAccount} purchaseHistory={purchaseHistory} seasonPass={seasonPass} penalties={penalties} steamAccount={steamAccount} isAuthenticated={isAuthenticated} theme={theme} onThemeChange={setTheme} onLogin={openLogin} onLogout={logout} />}
+        {activeTab === "profile" && <ProfilePage account={effectiveAccount} purchaseHistory={purchaseHistory} seasonPass={seasonPass} penalties={penalties} steamAccount={steamAccount} isAuthenticated={isAuthenticated} theme={theme} onThemeChange={setTheme} onLogin={openLogin} onLogout={logout} onCheckUpdate={runUpdateCheck} />}
       </div>
     </div>
   )
