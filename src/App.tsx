@@ -1252,37 +1252,42 @@ function formatRemainingTime(expiresAt: string) {
   return `${days} 天`
 }
 
-function SeasonPassTask({ title, current, milestones, unit }: { title: string; current: number; milestones: number[]; unit: string }) {
+// 任务完成状态：quest_status JSON 中值 >= 2 视为已完成（完成后才打勾）
+const questDone = (status: Record<string, number>, questId: string) => (status[questId] ?? 0) >= 2
+
+function SeasonPassTask({ title, current, milestones, unit, achieved }: { title: string; current: number; milestones: number[]; unit: string; achieved?: boolean[] }) {
   const max = milestones[milestones.length - 1] ?? 1
   const clamped = Math.min(Math.max(current, 0), max)
   const nextMilestone = milestones.find((milestone) => current < milestone)
+  // 优先使用任务完成状态（achieved）；未提供时退回按进度判断
+  const milestoneDone = (index: number, milestone: number) => achieved ? (achieved[index] ?? false) : current >= milestone
   return (
     <div className="rounded-lg border border-border bg-muted/25 p-3">
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-sm font-medium">{title}</span>
         <span className="text-xs text-muted-foreground">
           <span className="font-semibold text-foreground">{clamped}</span>/{max} {unit}
-          {nextMilestone !== undefined && <span className="ml-1.5">· 下一档 {nextMilestone}</span>}
+          {nextMilestone !== undefined && <span className="ml-1.5">· {nextMilestone} {unit}</span>}
         </span>
       </div>
       <div className="relative mt-2.5">
         <Progress value={(clamped / max) * 100} />
-        {milestones.map((milestone) => (
+        {milestones.map((milestone, index) => (
           <span
             key={milestone}
             className={cn(
               "absolute top-1/2 size-2 -translate-y-1/2 rounded-full border",
               milestone === max ? "-translate-x-full" : "-translate-x-1/2",
-              current >= milestone ? "border-primary bg-primary" : "border-border bg-background",
+              milestoneDone(index, milestone) ? "border-primary bg-primary" : "border-border bg-background",
             )}
             style={{ left: `${(milestone / max) * 100}%` }}
           />
         ))}
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5">
-        {milestones.map((milestone) => (
-          <span key={milestone} className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]", current >= milestone ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground")}>
-            {current >= milestone && <Check className="size-2.5" />}
+        {milestones.map((milestone, index) => (
+          <span key={milestone} className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]", milestoneDone(index, milestone) ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground")}>
+            {milestoneDone(index, milestone) && <Check className="size-2.5" />}
             {milestone} {unit}
           </span>
         ))}
@@ -1296,6 +1301,8 @@ function ProfilePage({ account, purchaseHistory, seasonPass, penalties, steamAcc
   const displayName = isAuthenticated ? steamAccount?.personaName || profile?.displayName || "StarCS 玩家" : "未登录"
   const avatarUrl = steamAccount?.avatarDataUrl || profile?.avatarUrl || starLogo
   const wallet = account?.wallet
+  const dailyQuestStatus = seasonPass?.dailyQuestStatus ?? {}
+  const weeklyQuestStatus = seasonPass?.weeklyQuestStatus ?? {}
   const [appVersion, setAppVersion] = useState("")
   const [updateCheckState, setUpdateCheckState] = useState<"idle" | "checking" | "latest" | "error">("idle")
 
@@ -1334,7 +1341,7 @@ function ProfilePage({ account, purchaseHistory, seasonPass, penalties, steamAcc
             <CardContent className="space-y-3"><div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-4"><div><div className="text-sm font-medium">{isAuthenticated ? `Steam ${profile?.steamConnected ? "已连接" : "未连接"}` : "尚未登录 StarCS"}</div><div className="mt-1 text-xs text-muted-foreground">{isAuthenticated && steamAccount ? `${steamAccount.personaName} · ${steamAccount.steamId}` : "点击登录后识别当前 Steam Session"}</div></div><Badge variant={isAuthenticated && profile?.steamConnected && penalties.length === 0 ? "success" : "outline"}>{isAuthenticated && profile?.steamConnected && penalties.length === 0 && <Check />}{!isAuthenticated ? "未登录" : penalties.length > 0 ? `${penalties.length} 条处罚` : profile?.steamConnected ? "正常" : "待连接"}</Badge></div>{penalties.map((penalty, index) => <div key={`${penalty.type}-${penalty.createdAt}-${index}`} className="rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm"><div className="flex justify-between gap-3"><span className="font-medium text-red-600 dark:text-red-300">{penalty.type || "账户处罚"}</span><span className="text-xs text-muted-foreground">{penalty.permanent ? "永久" : `至 ${formatLauncherDate(penalty.expiresAt)}`}</span></div><div className="mt-1 text-xs text-muted-foreground">{penalty.reason || "未提供原因"}{penalty.mode ? ` · ${penalty.mode}` : ""}</div></div>)}</CardContent>
           </Card>
 
-          {isAuthenticated && seasonPass?.available && <Card><CardHeader><div className="flex items-center gap-3"><div className="setting-icon"><Trophy /></div><div><CardTitle>赛季通行证 · 第 {seasonPass.seasonId} 赛季</CardTitle><CardDescription>真实赛季进度，最近更新于 {formatLauncherDate(seasonPass.updatedAt)}。</CardDescription></div></div></CardHeader><CardContent><div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">Lv. {seasonPass.level}</div><div className="text-xs text-muted-foreground">通行证等级</div></div><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">{seasonPass.experience}</div><div className="text-xs text-muted-foreground">经验</div></div><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">{seasonPass.claimedRewardCount}</div><div className="text-xs text-muted-foreground">已领礼包</div></div><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">{seasonPass.starSourceChestOpened}</div><div className="text-xs text-muted-foreground">已开宝箱</div></div></div><div className="mt-4 space-y-4"><div><div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">每日任务</div><div className="grid gap-3 sm:grid-cols-2"><SeasonPassTask title="游玩对局" current={seasonPass.dailyGames} milestones={[1, 3, 5]} unit="局" /><SeasonPassTask title="在线时长" current={seasonPass.dailyOnlineMinutes} milestones={[10, 30, 60]} unit="分钟" /></div></div><div><div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">每周任务</div><div className="grid gap-3 sm:grid-cols-2"><SeasonPassTask title="游玩对局" current={seasonPass.weeklyGames} milestones={[1, 5, 10]} unit="局" /><SeasonPassTask title="不同模式" current={seasonPass.weeklyCompletedModes} milestones={[3]} unit="种模式" /></div></div></div></CardContent></Card>}
+          {isAuthenticated && seasonPass?.available && <Card><CardHeader><div className="flex items-center gap-3"><div className="setting-icon"><Trophy /></div><div><CardTitle>赛季通行证 · 第 {seasonPass.seasonId} 赛季</CardTitle><CardDescription>赛季进度最近更新于 {formatLauncherDate(seasonPass.updatedAt)}。</CardDescription></div></div></CardHeader><CardContent><div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">Lv. {seasonPass.level}</div><div className="text-xs text-muted-foreground">通行证等级</div></div><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">{seasonPass.experience}</div><div className="text-xs text-muted-foreground">经验</div></div><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">{seasonPass.claimedRewardCount}</div><div className="text-xs text-muted-foreground">已领礼包</div></div><div className="rounded-lg border border-border bg-muted/25 p-3"><div className="text-xl font-semibold">{seasonPass.starSourceChestOpened}</div><div className="text-xs text-muted-foreground">已开宝箱</div></div></div><div className="mt-4 space-y-4"><div><div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">每日任务</div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><SeasonPassTask title="每日登录" current={seasonPass.dailyLoggedIn ? 1 : 0} milestones={[1]} unit="次" achieved={[questDone(dailyQuestStatus, "1")]} /><SeasonPassTask title="游玩对局" current={seasonPass.dailyGames} milestones={[1, 3, 5]} unit="局" achieved={["2", "3", "4"].map((id) => questDone(dailyQuestStatus, id))} /><SeasonPassTask title="在线时长" current={seasonPass.dailyOnlineMinutes} milestones={[10, 30, 60]} unit="分钟" achieved={["5", "6", "7"].map((id) => questDone(dailyQuestStatus, id))} /></div></div><div><div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">每周任务</div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><SeasonPassTask title="每周登录" current={seasonPass.weeklyLoggedIn ? 1 : 0} milestones={[1]} unit="次" achieved={[questDone(weeklyQuestStatus, "1")]} /><SeasonPassTask title="游玩对局" current={seasonPass.weeklyGames} milestones={[1, 5, 10]} unit="局" achieved={["2", "3", "4"].map((id) => questDone(weeklyQuestStatus, id))} /><SeasonPassTask title="不同模式" current={seasonPass.weeklyCompletedModes} milestones={[3]} unit="种模式" achieved={[questDone(weeklyQuestStatus, "5")]} /></div></div></div></CardContent></Card>}
 
           <Card>
             <CardHeader><div className="flex items-center gap-3"><div className="setting-icon"><Info /></div><div><CardTitle>关于 STAR Launcher</CardTitle><CardDescription>查看当前版本，或手动检查更新。</CardDescription></div></div></CardHeader>

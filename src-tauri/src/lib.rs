@@ -300,8 +300,16 @@ struct LauncherSeasonPass {
     star_source_chest_opened: i32,
     daily_games: i32,
     daily_online_minutes: i32,
+    #[serde(default)]
+    daily_logged_in: bool,
     weekly_games: i32,
     weekly_completed_modes: i32,
+    #[serde(default)]
+    weekly_logged_in: bool,
+    #[serde(default)]
+    daily_quest_status: std::collections::HashMap<String, i32>,
+    #[serde(default)]
+    weekly_quest_status: std::collections::HashMap<String, i32>,
     updated_at: String,
 }
 

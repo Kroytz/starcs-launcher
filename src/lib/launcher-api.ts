@@ -189,8 +189,12 @@ export type LauncherSeasonPass = {
   starSourceChestOpened: number
   dailyGames: number
   dailyOnlineMinutes: number
+  dailyLoggedIn: boolean
   weeklyGames: number
   weeklyCompletedModes: number
+  weeklyLoggedIn: boolean
+  dailyQuestStatus: Record<string, number>
+  weeklyQuestStatus: Record<string, number>
   updatedAt: string
 }
 
