@@ -397,6 +397,12 @@ struct PurchaseCommandResult {
     purchase_history: Vec<LauncherPurchaseHistoryItem>,
     #[serde(default)]
     store_items: Vec<LauncherStoreItem>,
+    #[serde(default = "default_true")]
+    refresh_complete: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Serialize, Deserialize)]
@@ -410,6 +416,8 @@ struct StardustPurchaseCommandResult {
     inventory: Vec<LauncherInventoryItem>,
     #[serde(default)]
     store_items: Vec<LauncherStoreItem>,
+    #[serde(default = "default_true")]
+    refresh_complete: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -829,6 +837,7 @@ async fn purchase_store_item(
             inventory: Vec::new(),
             purchase_history: Vec::new(),
             store_items: Vec::new(),
+            refresh_complete: true,
         });
     }
     if !status.is_success() || payload.code != 2000 {
@@ -880,6 +889,7 @@ async fn purchase_stardust_item(
             stardust: 0,
             inventory: Vec::new(),
             store_items: Vec::new(),
+            refresh_complete: true,
         });
     }
     if !status.is_success() || payload.code != 2000 {

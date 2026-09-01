@@ -1446,6 +1446,7 @@ function App() {
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
   const bootstrapFetchStarted = useRef(false)
   const updateCheckStarted = useRef(false)
+  const autoLoginStarted = useRef(false)
   const [updateDialog, setUpdateDialog] = useState<UpdateDialogState | null>(null)
   const activeAuthToken = useRef<string | null>(null)
   const isAuthenticated = authToken !== null
@@ -1497,6 +1498,35 @@ function App() {
     bootstrapFetchStarted.current = true
     void loadLauncherData()
   }, [loadLauncherData])
+
+  // 启动时若本机有记住的密码，则静默自动登录，避免每次打开登录器都手动点登录。
+  useEffect(() => {
+    if (autoLoginStarted.current) return
+    autoLoginStarted.current = true
+    void (async () => {
+      setIsSteamAccountLoading(true)
+      setSteamAccountError(null)
+      try {
+        const account = await getLocalSteamAccount()
+        setSteamAccount(account)
+        if (!account) return
+        const remembered = await loadRememberedPassword(account.steamId)
+        if (!remembered) {
+          setPassword("")
+          setRememberPassword(false)
+          return
+        }
+        setPassword(remembered)
+        setRememberPassword(true)
+        await performLogin(account, remembered, true, { silent: true })
+      } catch (error) {
+        console.error("[StarCS Launcher] 启动自动登录失败", error)
+      } finally {
+        setIsSteamAccountLoading(false)
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // 启动时检查更新：刚更新完 → 展示本次 changelog；发现新版本 → 按策略弹普通/强制更新。
   // 任何环节失败都只记录日志，绝不阻塞启动。
@@ -1565,20 +1595,22 @@ function App() {
     void loadSteamSession()
   }
 
-  async function login() {
-    if (!steamAccount) {
-      setLoginError("未识别到 Steam 账号。")
-      return
-    }
-    if (!password.trim()) {
-      setLoginError("请输入游戏内密码。")
-      return
+  async function performLogin(
+    account: LocalSteamAccount,
+    currentPassword: string,
+    remember: boolean,
+    options?: { silent?: boolean },
+  ) {
+    const silent = options?.silent === true
+    if (!currentPassword.trim()) {
+      if (!silent) setLoginError("请输入游戏内密码。")
+      return false
     }
     setLoginError(null)
     setIsLoginSubmitting(true)
     try {
-      const session = await loginLauncherAccount(steamAccount.steamId, password)
-      await updateRememberedPassword(steamAccount.steamId, rememberPassword ? password : null)
+      const session = await loginLauncherAccount(account.steamId, currentPassword)
+      await updateRememberedPassword(account.steamId, remember ? currentPassword : null)
       activeAuthToken.current = session.token
       setAuthenticatedAccount(session.account)
       setAuthenticatedInventory(session.inventory)
@@ -1589,20 +1621,46 @@ function App() {
       setSeasonPass(session.seasonPass)
       setPenalties(session.penalties)
       setAuthToken(session.token)
+      setRememberPassword(remember)
+      setPassword(currentPassword)
       setLoginOpen(false)
-      void loadAuthenticatedEquipment(session.token, password)
+      void loadAuthenticatedEquipment(session.token, currentPassword)
+      return true
     } catch (error) {
       const fallback = "登录失败，请检查游戏内密码后重试。"
       if (isInvalidCredentialsError(error)) {
         const raw = error instanceof Error ? error.message : String(error ?? "")
         const detail = raw.replace(/^invalid_credentials:/, "").trim()
-        setLoginError(presentError("账号登录失败", error, detail || fallback))
+        const message = presentError("账号登录失败", error, detail || fallback)
+        if (silent) {
+          try {
+            await updateRememberedPassword(account.steamId, null)
+          } catch {
+            // 忽略清理失败，仍引导用户重输密码。
+          }
+          setPassword("")
+          setRememberPassword(false)
+        }
+        setLoginError(message)
+        setLoginOpen(true)
+      } else if (silent) {
+        // 网络/服务异常：保留记住的密码，不打断浏览；用户可稍后手动登录。
+        console.error("[StarCS Launcher] 自动登录失败", error)
       } else {
         setLoginError(presentError("账号登录失败", error, fallback))
       }
+      return false
     } finally {
       setIsLoginSubmitting(false)
     }
+  }
+
+  async function login() {
+    if (!steamAccount) {
+      setLoginError("未识别到 Steam 账号。")
+      return
+    }
+    await performLogin(steamAccount, password, rememberPassword)
   }
 
   function logout() {
@@ -1803,10 +1861,12 @@ function App() {
         if (!recovered) return false
         result = recovered
       }
-      // 星尘购买成功后同步最新余额、库存与商城列表（已购星尘物品会即时从商城隐藏）
+      // 星尘购买成功后同步最新余额；展示列表仅在刷新完整时覆盖，避免半成功响应清空本地库存。
       setAuthenticatedAccount((current) => current ? { ...current, wallet: { ...current.wallet, stardust: result.stardust, stardustAvailable: true } } : current)
-      setAuthenticatedInventory(result.inventory)
-      setAuthenticatedStoreItems(result.storeItems)
+      if (result.refreshComplete !== false) {
+        setAuthenticatedInventory(result.inventory)
+        setAuthenticatedStoreItems(result.storeItems)
+      }
       return true
     }
     const pricingId = Number(item.id.replace(/^pricing-/, ""))
@@ -1819,11 +1879,13 @@ function App() {
       if (!recovered) return false
       result = recovered
     }
-    // 购买成功后同步最新余额、库存、购买记录与商城列表（永久商品会即时从商城隐藏）
+    // 购买成功后同步最新余额；展示列表仅在刷新完整时覆盖，避免半成功响应清空本地库存。
     setAuthenticatedAccount((current) => current ? { ...current, wallet: { ...current.wallet, starlight: result.starlight, starlightAvailable: true } } : current)
-    setAuthenticatedInventory(result.inventory)
-    setPurchaseHistory(result.purchaseHistory)
-    setAuthenticatedStoreItems(result.storeItems)
+    if (result.refreshComplete !== false) {
+      setAuthenticatedInventory(result.inventory)
+      setPurchaseHistory(result.purchaseHistory)
+      setAuthenticatedStoreItems(result.storeItems)
+    }
     return true
   }
 

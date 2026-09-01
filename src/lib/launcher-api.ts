@@ -270,6 +270,7 @@ export type PurchaseCommandResult = {
   inventory: LauncherInventoryItem[]
   purchaseHistory: LauncherPurchaseHistoryItem[]
   storeItems: LauncherStoreItem[]
+  refreshComplete?: boolean
 }
 
 export async function purchaseStoreItem(token: string, password: string, pricingId: number) {
@@ -282,6 +283,7 @@ export type StardustPurchaseCommandResult = {
   stardust: number
   inventory: LauncherInventoryItem[]
   storeItems: LauncherStoreItem[]
+  refreshComplete?: boolean
 }
 
 export async function purchaseStardustItem(token: string, password: string, itemType: string, uniqueId: string) {
