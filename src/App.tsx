@@ -127,7 +127,9 @@ import "./App.css"
 
 function presentError(context: string, error: unknown, message: string) {
   console.error(`[StarCS Launcher] ${context}`, error)
-  return message
+  const detail = error instanceof Error ? error.message : typeof error === "string" ? error : ""
+  const trimmed = detail.trim()
+  return trimmed || message
 }
 
 function isInvalidCredentialsError(error: unknown) {
@@ -1144,13 +1146,14 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
     if (!equippingItem) return
     const slot = getCosmeticSlot(equippingItem)
     const productId = equippingItem.productId
-    if (!slot || !productId || selectedEquipmentModes.length === 0) return
+    const modes = selectedEquipmentModes.filter((mode) => getSelectableEquipmentModes(equippingItem).includes(mode))
+    if (!slot || !productId || modes.length === 0) return
     setEquipmentError(null)
     setIsEquipmentSubmitting(true)
     try {
-      if (!await onEquipmentOperation(true, productId, selectedEquipmentModes, equipmentTeam)) return
+      if (!await onEquipmentOperation(true, productId, modes, equipmentTeam)) return
       const teamLabel = slot === "weapon" ? "全阵营" : equipmentTeam === "all" ? "所有阵营" : equipmentTeam.toUpperCase()
-      setInventoryNotice(`已将「${equippingItem.name}」装配到游戏内配置：${selectedEquipmentModes.length} 个模式 · ${teamLabel}。`)
+      setInventoryNotice(`已将「${equippingItem.name}」装配到游戏内配置：${modes.length} 个模式 · ${teamLabel}。`)
       setEquippingItem(null)
     } catch (error) {
       setEquipmentError(presentError("装备物品失败", error, "装备同步未能完成，请稍后重试。"))
@@ -1163,13 +1166,14 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
     if (!equippingItem) return
     const slot = getCosmeticSlot(equippingItem)
     const productId = equippingItem.productId
-    if (!slot || !productId || selectedEquipmentModes.length === 0) return
+    const modes = selectedEquipmentModes.filter((mode) => getSelectableEquipmentModes(equippingItem).includes(mode))
+    if (!slot || !productId || modes.length === 0) return
     setEquipmentError(null)
     setIsEquipmentSubmitting(true)
     try {
-      if (!await onEquipmentOperation(false, productId, selectedEquipmentModes, equipmentTeam)) return
+      if (!await onEquipmentOperation(false, productId, modes, equipmentTeam)) return
       const teamLabel = slot === "weapon" ? "全阵营" : equipmentTeam === "all" ? "所有阵营" : equipmentTeam.toUpperCase()
-      setInventoryNotice(`已将「${equippingItem.name}」从游戏内配置卸载：${selectedEquipmentModes.length} 个模式 · ${teamLabel}。`)
+      setInventoryNotice(`已将「${equippingItem.name}」从游戏内配置卸载：${modes.length} 个模式 · ${teamLabel}。`)
       setEquippingItem(null)
     } catch (error) {
       setEquipmentError(presentError("卸下物品失败", error, "卸下操作未能完成，请稍后重试。"))
