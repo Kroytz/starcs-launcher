@@ -12,6 +12,20 @@ const STAR_SERVERS_URL: &str = "https://api.starcs.cn/api/v1/servers";
 const DEFAULT_LAUNCHER_BACKEND_URL: &str = "http://110.42.9.56:8088";
 const A2S_TIMEOUT: Duration = Duration::from_millis(1_500);
 const A2S_INFO_QUERY: &[u8] = b"\xFF\xFF\xFF\xFFTSource Engine Query\x00";
+const AUTH_CODE_SESSION_EXPIRED: i32 = 4010;
+const AUTH_CODE_CREDENTIALS_STALE: i32 = 4011;
+const AUTH_CODE_INVALID_CREDENTIALS: i32 = 4012;
+const AUTH_FAILURE_SESSION: &str = "session";
+const AUTH_FAILURE_CREDENTIALS: &str = "credentials";
+
+fn classify_auth_failure(code: i32) -> &'static str {
+    match code {
+        AUTH_CODE_CREDENTIALS_STALE | AUTH_CODE_INVALID_CREDENTIALS => AUTH_FAILURE_CREDENTIALS,
+        AUTH_CODE_SESSION_EXPIRED => AUTH_FAILURE_SESSION,
+        // Legacy 4003 and any other 401: keep remembered password.
+        _ => AUTH_FAILURE_SESSION,
+    }
+}
 
 #[derive(Debug, Deserialize)]
 struct ApiEnvelope<T> {
@@ -353,6 +367,8 @@ struct LauncherEquipmentMutationRequest {
 #[serde(rename_all = "camelCase")]
 struct LauncherEquipmentCommandResult {
     authenticated: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    auth_failure: Option<String>,
     equipment: Option<serde_json::Value>,
 }
 
@@ -374,6 +390,8 @@ struct StarlightPurchaseRequest {
 struct PurchaseCommandResult {
     #[serde(default)]
     authenticated: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    auth_failure: Option<String>,
     starlight: i64,
     inventory: Vec<LauncherInventoryItem>,
     purchase_history: Vec<LauncherPurchaseHistoryItem>,
@@ -386,6 +404,8 @@ struct PurchaseCommandResult {
 struct StardustPurchaseCommandResult {
     #[serde(default)]
     authenticated: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    auth_failure: Option<String>,
     stardust: i64,
     inventory: Vec<LauncherInventoryItem>,
     #[serde(default)]
@@ -404,6 +424,8 @@ struct StardustEquipment {
 #[serde(rename_all = "camelCase")]
 struct StardustEquipmentCommandResult {
     authenticated: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    auth_failure: Option<String>,
     equipments: Vec<StardustEquipment>,
 }
 
@@ -593,6 +615,11 @@ async fn login_launcher_account(
         .await
         .map_err(|error| format!("解析登录响应失败：{error}"))?;
     if !status.is_success() || payload.code != 2000 {
+        if payload.code == AUTH_CODE_INVALID_CREDENTIALS
+            || payload.code == AUTH_CODE_CREDENTIALS_STALE
+        {
+            return Err(format!("invalid_credentials:{}", payload.msg));
+        }
         return Err(payload.msg);
     }
     payload.data.ok_or_else(|| "登录响应缺少会话数据".to_string())
@@ -619,7 +646,10 @@ async fn verify_launcher_password(token: String, password: String) -> Result<boo
         .await
         .map_err(|error| format!("解析密码复验响应失败：{error}"))?;
     if status == reqwest::StatusCode::UNAUTHORIZED {
-        return Ok(false);
+        if classify_auth_failure(payload.code) == AUTH_FAILURE_CREDENTIALS {
+            return Ok(false);
+        }
+        return Err(format!("session_expired:{}", payload.msg));
     }
     if !status.is_success() || payload.code != 2000 {
         return Err(payload.msg);
@@ -693,6 +723,7 @@ async fn parse_equipment_response(
     if status == reqwest::StatusCode::UNAUTHORIZED {
         return Ok(LauncherEquipmentCommandResult {
             authenticated: false,
+            auth_failure: Some(classify_auth_failure(payload.code).to_string()),
             equipment: None,
         });
     }
@@ -704,6 +735,7 @@ async fn parse_equipment_response(
         .ok_or_else(|| "装备配置响应缺少数据".to_string())?;
     Ok(LauncherEquipmentCommandResult {
         authenticated: true,
+        auth_failure: None,
         equipment: Some(equipment),
     })
 }
@@ -746,6 +778,7 @@ async fn update_stardust_equipment(
     if status == reqwest::StatusCode::UNAUTHORIZED {
         return Ok(StardustEquipmentCommandResult {
             authenticated: false,
+            auth_failure: Some(classify_auth_failure(payload.code).to_string()),
             equipments: Vec::new(),
         });
     }
@@ -754,6 +787,7 @@ async fn update_stardust_equipment(
     }
     Ok(StardustEquipmentCommandResult {
         authenticated: true,
+        auth_failure: None,
         equipments: payload.data.unwrap_or_default(),
     })
 }
@@ -790,6 +824,7 @@ async fn purchase_store_item(
     if status == reqwest::StatusCode::UNAUTHORIZED {
         return Ok(PurchaseCommandResult {
             authenticated: false,
+            auth_failure: Some(classify_auth_failure(payload.code).to_string()),
             starlight: 0,
             inventory: Vec::new(),
             purchase_history: Vec::new(),
@@ -801,6 +836,7 @@ async fn purchase_store_item(
     }
     let mut result = payload.data.ok_or_else(|| "购买响应缺少数据".to_string())?;
     result.authenticated = true;
+    result.auth_failure = None;
     Ok(result)
 }
 
@@ -840,6 +876,7 @@ async fn purchase_stardust_item(
     if status == reqwest::StatusCode::UNAUTHORIZED {
         return Ok(StardustPurchaseCommandResult {
             authenticated: false,
+            auth_failure: Some(classify_auth_failure(payload.code).to_string()),
             stardust: 0,
             inventory: Vec::new(),
             store_items: Vec::new(),
@@ -850,6 +887,7 @@ async fn purchase_stardust_item(
     }
     let mut result = payload.data.ok_or_else(|| "购买响应缺少数据".to_string())?;
     result.authenticated = true;
+    result.auth_failure = None;
     Ok(result)
 }
 

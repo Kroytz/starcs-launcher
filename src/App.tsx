@@ -106,6 +106,7 @@ import {
   updateStardustEquipment,
   type LauncherAccount,
   type LauncherAnnouncement,
+  type AuthFailureReason,
   type LauncherBootstrap,
   type LauncherInventoryItem,
   type LauncherMapResource,
@@ -127,6 +128,15 @@ import "./App.css"
 function presentError(context: string, error: unknown, message: string) {
   console.error(`[StarCS Launcher] ${context}`, error)
   return message
+}
+
+function isInvalidCredentialsError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "")
+  return message.includes("invalid_credentials:")
+}
+
+function authFailureReason(result: { authFailure?: AuthFailureReason | null }): AuthFailureReason {
+  return result.authFailure === "credentials" ? "credentials" : "session"
 }
 
 type AppTab = "home" | "store" | "inventory" | "profile"
@@ -1582,7 +1592,14 @@ function App() {
       setLoginOpen(false)
       void loadAuthenticatedEquipment(session.token, password)
     } catch (error) {
-      setLoginError(presentError("账号登录失败", error, "登录失败，请检查游戏内密码后重试。"))
+      const fallback = "登录失败，请检查游戏内密码后重试。"
+      if (isInvalidCredentialsError(error)) {
+        const raw = error instanceof Error ? error.message : String(error ?? "")
+        const detail = raw.replace(/^invalid_credentials:/, "").trim()
+        setLoginError(presentError("账号登录失败", error, detail || fallback))
+      } else {
+        setLoginError(presentError("账号登录失败", error, fallback))
+      }
     } finally {
       setIsLoginSubmitting(false)
     }
@@ -1602,7 +1619,11 @@ function App() {
     setPenalties([])
   }
 
-  async function invalidateAuthentication() {
+  function endSession() {
+    logout()
+  }
+
+  async function rejectCredentials(message = "密码不正确或已变更，请使用当前密码重新登录。") {
     if (steamAccount?.steamId) {
       try {
         await updateRememberedPassword(steamAccount.steamId, null)
@@ -1613,8 +1634,80 @@ function App() {
     logout()
     setPassword("")
     setRememberPassword(false)
-    setLoginError("游戏内密码已变更或校验失败，请使用当前密码重新登录。")
+    setLoginError(message)
     setLoginOpen(true)
+  }
+
+  async function promptSessionRelogin() {
+    endSession()
+    setLoginError("登录会话已失效，请重新登录。")
+    setLoginOpen(true)
+    if (steamAccount?.steamId && !password.trim()) {
+      try {
+        const remembered = await loadRememberedPassword(steamAccount.steamId)
+        if (remembered) {
+          setPassword(remembered)
+          setRememberPassword(true)
+        }
+      } catch {
+        // 保留空密码输入框即可。
+      }
+    }
+  }
+
+  async function recoverSession(): Promise<string | null> {
+    if (!steamAccount) {
+      await promptSessionRelogin()
+      return null
+    }
+    const currentPassword = password.trim()
+    if (!currentPassword) {
+      await promptSessionRelogin()
+      return null
+    }
+    try {
+      const session = await loginLauncherAccount(steamAccount.steamId, currentPassword)
+      activeAuthToken.current = session.token
+      setAuthenticatedAccount(session.account)
+      setAuthenticatedInventory(session.inventory)
+      setAuthenticatedStoreItems(session.storeItems)
+      setPurchaseHistory(session.purchaseHistory)
+      setSeasonPass(session.seasonPass)
+      setPenalties(session.penalties)
+      setAuthToken(session.token)
+      return session.token
+    } catch (error) {
+      if (isInvalidCredentialsError(error)) {
+        await rejectCredentials()
+        return null
+      }
+      console.error("[StarCS Launcher] 静默重登失败", error)
+      await promptSessionRelogin()
+      return null
+    }
+  }
+
+  async function handleAuthFailure<T extends { authenticated: boolean; authFailure?: AuthFailureReason | null }>(
+    result: T,
+    retry: (token: string) => Promise<T>,
+    alreadyRetried = false,
+  ): Promise<T | null> {
+    if (result.authenticated) return result
+    if (authFailureReason(result) === "credentials") {
+      await rejectCredentials()
+      return null
+    }
+    if (alreadyRetried) {
+      await promptSessionRelogin()
+      return null
+    }
+    const recoveredToken = await recoverSession()
+    if (!recoveredToken) return null
+    const retried = await retry(recoveredToken)
+    if (!retried.authenticated) {
+      return handleAuthFailure(retried, retry, true)
+    }
+    return retried
   }
 
   async function loadAuthenticatedEquipment(token: string, currentPassword: string) {
@@ -1622,12 +1715,13 @@ function App() {
     setIsEquipmentLoading(true)
     setEquipmentUnavailableReason(null)
     try {
-      const result = await fetchLauncherEquipment(token, currentPassword)
-      if (activeAuthToken.current !== token) return
+      let result = await fetchLauncherEquipment(token, currentPassword)
       if (!result.authenticated) {
-        await invalidateAuthentication()
-        return
+        const recovered = await handleAuthFailure(result, (nextToken) => fetchLauncherEquipment(nextToken, currentPassword))
+        if (!recovered || !activeAuthToken.current) return
+        result = recovered
       }
+      if (!activeAuthToken.current) return
       if (!result.equipment) {
         throw new Error("后端未返回游戏内装备配置。")
       }
@@ -1644,12 +1738,12 @@ function App() {
       }
       setAuthenticatedEquipment(result.equipment)
     } catch (error) {
-      if (activeAuthToken.current === token) {
+      if (activeAuthToken.current) {
         setAuthenticatedEquipment(null)
         setEquipmentUnavailableReason(presentError("读取游戏内装备配置失败", error, "装备配置服务暂时不可用，请稍后重新读取。"))
       }
     } finally {
-      if (activeAuthToken.current === token) setIsEquipmentLoading(false)
+      if (activeAuthToken.current) setIsEquipmentLoading(false)
     }
   }
 
@@ -1661,10 +1755,11 @@ function App() {
     if (!authenticatedEquipment) {
       throw new Error(equipmentUnavailableReason ?? "游戏内装备配置尚未加载完成。")
     }
-    const result = await updateLauncherEquipment(authToken, password, productId, modes, team, equip)
+    let result = await updateLauncherEquipment(authToken, password, productId, modes, team, equip)
     if (!result.authenticated) {
-      await invalidateAuthentication()
-      return false
+      const recovered = await handleAuthFailure(result, (nextToken) => updateLauncherEquipment(nextToken, password, productId, modes, team, equip))
+      if (!recovered) return false
+      result = recovered
     }
     if (!result.equipment) {
       throw new Error("后端未返回更新后的装备配置。")
@@ -1678,10 +1773,11 @@ function App() {
       openLogin()
       return false
     }
-    const result = await updateStardustEquipment(authToken, password, itemType, uniqueId, equip)
+    let result = await updateStardustEquipment(authToken, password, itemType, uniqueId, equip)
     if (!result.authenticated) {
-      await invalidateAuthentication()
-      return false
+      const recovered = await handleAuthFailure(result, (nextToken) => updateStardustEquipment(nextToken, password, itemType, uniqueId, equip))
+      if (!recovered) return false
+      result = recovered
     }
     // 用返回的最新装备列表刷新本地库存的同 Type 互斥状态
     setAuthenticatedInventory((current) => (current ?? []).map((item) => {
@@ -1701,10 +1797,11 @@ function App() {
       if (!item.stardustType || !item.externalId) {
         throw new Error("商品标识无效，暂时无法购买。")
       }
-      const result = await purchaseStardustItem(authToken, password, item.stardustType, item.externalId)
+      let result = await purchaseStardustItem(authToken, password, item.stardustType, item.externalId)
       if (!result.authenticated) {
-        await invalidateAuthentication()
-        return false
+        const recovered = await handleAuthFailure(result, (nextToken) => purchaseStardustItem(nextToken, password, item.stardustType!, item.externalId!))
+        if (!recovered) return false
+        result = recovered
       }
       // 星尘购买成功后同步最新余额、库存与商城列表（已购星尘物品会即时从商城隐藏）
       setAuthenticatedAccount((current) => current ? { ...current, wallet: { ...current.wallet, stardust: result.stardust, stardustAvailable: true } } : current)
@@ -1716,10 +1813,11 @@ function App() {
     if (!Number.isFinite(pricingId) || pricingId <= 0) {
       throw new Error("商品标识无效，暂时无法购买。")
     }
-    const result = await purchaseStoreItem(authToken, password, pricingId)
+    let result = await purchaseStoreItem(authToken, password, pricingId)
     if (!result.authenticated) {
-      await invalidateAuthentication()
-      return false
+      const recovered = await handleAuthFailure(result, (nextToken) => purchaseStoreItem(nextToken, password, pricingId))
+      if (!recovered) return false
+      result = recovered
     }
     // 购买成功后同步最新余额、库存、购买记录与商城列表（永久商品会即时从商城隐藏）
     setAuthenticatedAccount((current) => current ? { ...current, wallet: { ...current.wallet, starlight: result.starlight, starlightAvailable: true } } : current)

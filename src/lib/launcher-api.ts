@@ -113,8 +113,11 @@ export type StarLightEquipmentProfile = {
   unavailableModes: Record<string, string>
 }
 
+export type AuthFailureReason = "session" | "credentials"
+
 export type LauncherEquipmentCommandResult = {
   authenticated: boolean
+  authFailure?: AuthFailureReason | null
   equipment: StarLightEquipmentProfile | null
 }
 
@@ -252,6 +255,7 @@ export type StardustEquipment = {
 
 export type StardustEquipmentCommandResult = {
   authenticated: boolean
+  authFailure?: AuthFailureReason | null
   equipments: StardustEquipment[]
 }
 
@@ -261,6 +265,7 @@ export async function updateStardustEquipment(token: string, password: string, i
 
 export type PurchaseCommandResult = {
   authenticated: boolean
+  authFailure?: AuthFailureReason | null
   starlight: number
   inventory: LauncherInventoryItem[]
   purchaseHistory: LauncherPurchaseHistoryItem[]
@@ -273,6 +278,7 @@ export async function purchaseStoreItem(token: string, password: string, pricing
 
 export type StardustPurchaseCommandResult = {
   authenticated: boolean
+  authFailure?: AuthFailureReason | null
   stardust: number
   inventory: LauncherInventoryItem[]
   storeItems: LauncherStoreItem[]
