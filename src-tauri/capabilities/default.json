@@ -9,7 +9,6 @@
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-start-dragging",
-    "opener:default",
     "updater:default",
     "process:default",
     {
@@ -17,7 +16,9 @@
       "allow": [
         { "url": "steam://connect/*" },
         { "url": "steam://openurl/*" },
-        { "url": "https://www.ifdian.net/item/*" }
+        { "url": "https://www.ifdian.net/item/*" },
+        { "url": "https://starcs.cn/*" },
+        { "url": "https://*.starcs.cn/*" }
       ]
     }
   ]
