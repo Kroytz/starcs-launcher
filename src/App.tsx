@@ -981,9 +981,21 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
   const [isEquipmentSubmitting, setIsEquipmentSubmitting] = useState(false)
   const [stardustPendingId, setStardustPendingId] = useState<string | null>(null)
   const [activeCategory, setActiveCategory] = useState("all")
+  const categoryScrollRef = useRef<HTMLDivElement>(null)
+  const [categoryScrollEdges, setCategoryScrollEdges] = useState({ left: false, right: false })
 
   const inventoryCategories = [...new Set(inventory.map((item) => item.type || "其他"))]
   const filteredInventory = activeCategory === "all" ? inventory : inventory.filter((item) => (item.type || "其他") === activeCategory)
+
+  const updateCategoryScrollEdges = useCallback(() => {
+    const container = categoryScrollRef.current
+    if (!container) return
+    const maxScrollLeft = Math.max(0, container.scrollWidth - container.clientWidth)
+    setCategoryScrollEdges({
+      left: container.scrollLeft > 2,
+      right: container.scrollLeft < maxScrollLeft - 2,
+    })
+  }, [])
 
   useEffect(() => {
     setInventory(items)
@@ -993,6 +1005,26 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
       return items.some((item) => (item.type || "其他") === current) ? current : "all"
     })
   }, [items])
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+    const container = categoryScrollRef.current
+    if (!container) return
+    const frame = requestAnimationFrame(updateCategoryScrollEdges)
+    const observer = new ResizeObserver(updateCategoryScrollEdges)
+    observer.observe(container)
+    return () => {
+      cancelAnimationFrame(frame)
+      observer.disconnect()
+    }
+  }, [isAuthenticated, inventory.length, inventoryCategories.length, updateCategoryScrollEdges])
+
+  function scrollCategories(direction: -1 | 1) {
+    const container = categoryScrollRef.current
+    if (!container) return
+    const distance = Math.max(240, Math.round(container.clientWidth * 0.65))
+    container.scrollBy({ left: direction * distance, behavior: "smooth" })
+  }
 
   useEffect(() => {
     const closeMenu = () => setContextMenu(null)
@@ -1166,9 +1198,13 @@ function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isE
       {isAuthenticated && inventoryNotice && <div className="pointer-events-none fixed inset-x-0 top-[76px] z-30 flex justify-center px-4"><div className="pointer-events-auto flex max-w-xl items-start gap-3 rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm shadow-lg shadow-black/5 backdrop-blur-md"><Info className="mt-0.5 size-4 shrink-0 text-primary" /><span className="leading-5">{inventoryNotice}</span><button type="button" aria-label="关闭提示" className="mt-0.5 shrink-0 text-muted-foreground transition-colors hover:text-foreground" onClick={() => setInventoryNotice(null)}><X className="size-4" /></button></div></div>}
       {isAuthenticated && (isEquipmentLoading || equipmentUnavailableReason) && <div className="mb-4 flex flex-col justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><div><div className="font-medium text-amber-700 dark:text-amber-200">{isEquipmentLoading ? "正在同步游戏内装备配置" : "装备功能暂不可用"}</div><div className="mt-1 text-xs text-muted-foreground">{isEquipmentLoading ? "库存和其他登录功能可以正常使用。" : equipmentUnavailableReason}</div></div>{equipmentUnavailableReason && <Button variant="outline" size="sm" onClick={onRetryEquipment}><RefreshCw />重新读取</Button>}</div>}
       {isAuthenticated && !isEquipmentLoading && !equipmentUnavailableReason && unavailableModeEntries.length > 0 && <div className="mb-4 flex flex-col justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm sm:flex-row sm:items-center"><div><div className="font-medium text-amber-700 dark:text-amber-200">部分模式的装备配置暂不可用</div><div className="mt-1 text-xs text-muted-foreground">暂不可用：{unavailableModeEntries.map(([mode]) => modeLabels[mode] ?? mode).join("、")}。其他模式可以正常配置。</div></div><Button variant="outline" size="sm" onClick={onRetryEquipment}><RefreshCw />重新读取</Button></div>}
-      {isAuthenticated && <div className="store-category-scroll mb-4 flex items-center gap-2 overflow-x-auto pb-1" aria-label="库存分类">
-        <Button size="sm" className="shrink-0" variant={activeCategory === "all" ? "secondary" : "outline"} onClick={() => setActiveCategory("all")}>全部 {inventory.length}</Button>
-        {inventoryCategories.map((category) => <Button key={category} size="sm" className="shrink-0" variant={activeCategory === category ? "secondary" : "outline"} onClick={() => setActiveCategory(category)}>{category} {inventory.filter((item) => (item.type || "其他") === category).length}</Button>)}
+      {isAuthenticated && <div className="relative mb-4">
+        {categoryScrollEdges.left && <button type="button" className="group absolute inset-y-0 left-0 z-10 flex w-12 items-center justify-start bg-gradient-to-r from-background via-background/85 to-transparent opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100" onClick={() => scrollCategories(-1)} aria-label="向左查看更多分类"><span className="grid size-7 place-items-center rounded-full border border-border bg-card text-foreground shadow-md"><ChevronLeft className="size-4" /></span></button>}
+        <div ref={categoryScrollRef} className="store-category-scroll flex items-center gap-2 overflow-x-auto pb-1" aria-label="库存分类" onScroll={updateCategoryScrollEdges}>
+          <Button size="sm" className="shrink-0" variant={activeCategory === "all" ? "secondary" : "outline"} onClick={() => setActiveCategory("all")}>全部 {inventory.length}</Button>
+          {inventoryCategories.map((category) => <Button key={category} size="sm" className="shrink-0" variant={activeCategory === category ? "secondary" : "outline"} onClick={() => setActiveCategory(category)}>{category} {inventory.filter((item) => (item.type || "其他") === category).length}</Button>)}
+        </div>
+        {categoryScrollEdges.right && <button type="button" className="group absolute inset-y-0 right-0 z-10 flex w-12 items-center justify-end bg-gradient-to-l from-background via-background/85 to-transparent opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100" onClick={() => scrollCategories(1)} aria-label="向右查看更多分类"><span className="grid size-7 place-items-center rounded-full border border-border bg-card text-foreground shadow-md"><ChevronRight className="size-4" /></span></button>}
       </div>}
       {isAuthenticated && <div className="inventory-grid">
         {filteredInventory.map((item) => {
