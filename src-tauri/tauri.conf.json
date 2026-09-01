@@ -23,7 +23,25 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": {
+        "default-src": "'self' asset:",
+        "connect-src": "ipc: http://ipc.localhost https://ipc.localhost",
+        "font-src": "'self' asset:",
+        "img-src": "'self' asset: data: blob: https://static.starcs.cn https://*.starcs.cn https://starcs.cn",
+        "style-src": "'unsafe-inline' 'self'",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "frame-src": "'none'",
+        "form-action": "'none'"
+      },
+      "devCsp": {
+        "default-src": "'self' 'unsafe-inline' 'unsafe-eval' http://localhost:1420 ws://localhost:1420 asset: ipc: http://ipc.localhost https://ipc.localhost data: blob:",
+        "connect-src": "'self' http://localhost:1420 ws://localhost:1420 ipc: http://ipc.localhost https://ipc.localhost",
+        "img-src": "'self' asset: data: blob: http://localhost:1420 https:",
+        "style-src": "'unsafe-inline' 'self'",
+        "font-src": "'self' asset: data:",
+        "object-src": "'none'"
+      }
     }
   },
   "bundle": {
