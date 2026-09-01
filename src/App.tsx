@@ -1614,7 +1614,14 @@ function App() {
     setIsLoginSubmitting(true)
     try {
       const session = await loginLauncherAccount(account.steamId, currentPassword)
-      await updateRememberedPassword(account.steamId, remember ? currentPassword : null)
+      let remembered = remember
+      // 本地记住密码失败不应把已成功的后端登录当成失败。
+      try {
+        await updateRememberedPassword(account.steamId, remember ? currentPassword : null)
+      } catch (error) {
+        console.error("[StarCS Launcher] 保存记住密码失败", error)
+        remembered = false
+      }
       activeAuthToken.current = session.token
       setAuthenticatedAccount(session.account)
       setAuthenticatedInventory(session.inventory)
@@ -1625,7 +1632,7 @@ function App() {
       setSeasonPass(session.seasonPass)
       setPenalties(session.penalties)
       setAuthToken(session.token)
-      setRememberPassword(remember)
+      setRememberPassword(remembered)
       setPassword(currentPassword)
       setLoginOpen(false)
       void loadAuthenticatedEquipment(session.token, currentPassword)
