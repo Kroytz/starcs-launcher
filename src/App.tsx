@@ -23,6 +23,7 @@ import {
   Home,
   Info,
   KeyRound,
+  ListChecks,
   LogIn,
   Map,
   Minus,
@@ -61,6 +62,7 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
+import { TaskCenterPage } from "@/components/TaskCenterPage"
 import { UpdateDialog, type UpdateDialogState } from "@/components/UpdateDialog"
 import { cn } from "@/lib/utils"
 import {
@@ -173,13 +175,14 @@ function authFailureReason(result: { authFailure?: AuthFailureReason | null }): 
   return result.authFailure === "credentials" ? "credentials" : "session"
 }
 
-type AppTab = "home" | "store" | "inventory" | "profile"
+type AppTab = "home" | "store" | "inventory" | "tasks" | "profile"
 type ServerSort = "players" | "mode"
 
 const tabs: Array<{ id: AppTab; label: string; icon: LucideIcon }> = [
   { id: "home", label: "首页", icon: Home },
   { id: "store", label: "商城", icon: ShoppingBag },
   { id: "inventory", label: "库存", icon: Backpack },
+  { id: "tasks", label: "任务", icon: ListChecks },
   { id: "profile", label: "我", icon: UserRound },
 ]
 
@@ -2060,6 +2063,7 @@ function App() {
         {activeTab === "home" && <HomePage announcements={bootstrap?.announcements ?? []} maps={bootstrap?.maps ?? []} backendError={bootstrapError} isBackendLoading={isBootstrapLoading} onRetryBackend={() => void loadLauncherData()} />}
         {activeTab === "store" && (effectiveBootstrap ? <StorePage data={effectiveBootstrap} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} onPurchase={applyStorePurchase} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
         {activeTab === "inventory" && (bootstrap ? <InventoryPage key={isAuthenticated ? effectiveAccount?.profile.userId ?? "authenticated" : "guest"} items={isAuthenticated ? authenticatedInventory ?? [] : []} purchaseHistory={purchaseHistory} equipment={authenticatedEquipment ?? { version: 2, plugin: "star_light_store", modes: {}, unavailableModes: {} }} isAuthenticated={isAuthenticated} isEquipmentLoading={isEquipmentLoading} equipmentUnavailableReason={equipmentUnavailableReason} onRequireLogin={openLogin} onRetryEquipment={() => { if (authToken) void loadAuthenticatedEquipment(authToken, password) }} onEquipmentOperation={applyEquipmentOperation} onStardustOperation={applyStardustOperation} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
+        {activeTab === "tasks" && <TaskCenterPage isAuthenticated={isAuthenticated} onRequireLogin={openLogin} onNavigateHome={() => setActiveTab("home")} />}
         {activeTab === "profile" && <ProfilePage account={effectiveAccount} purchaseHistory={purchaseHistory} seasonPass={seasonPass} penalties={penalties} steamAccount={steamAccount} isAuthenticated={isAuthenticated} theme={theme} onThemeChange={setTheme} onLogin={openLogin} onLogout={logout} onCheckUpdate={runUpdateCheck} />}
       </div>
     </div>
