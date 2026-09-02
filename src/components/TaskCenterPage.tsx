@@ -4,6 +4,7 @@ import {
   CalendarDays,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   Clock3,
   Flame,
@@ -63,14 +64,16 @@ type DemoTask = {
   hint: string
 }
 
-type DemoEventGroup = {
+type DemoTaskGroup = {
   id: string
   title: string
   subtitle: string
-  mode: string
-  deadline: string
+  tag: string
+  deadline?: string
+  order: "sequential" | "parallel"
   icon: LucideIcon
   accent: string
+  footer?: string
 }
 
 const categoryOptions: Array<{ id: TaskCategory; label: string; description: string }> = [
@@ -81,13 +84,47 @@ const categoryOptions: Array<{ id: TaskCategory; label: string; description: str
   { id: "season", label: "赛季任务", description: "本赛季长期目标" },
 ]
 
-const demoEventGroups: DemoEventGroup[] = [
+const demoOnboardingGroups: DemoTaskGroup[] = [
+  {
+    id: "launcher-basics",
+    title: "初来乍到",
+    subtitle: "熟悉登录、进服、库存和装备配置。",
+    tag: "基础引导",
+    order: "sequential",
+    icon: Sparkles,
+    accent: "from-blue-500 to-indigo-600",
+    footer: "完成全部基础任务后，再获得新手名片与 25 星尘。",
+  },
+  {
+    id: "zm-rookie",
+    title: "ZM · 求生手册",
+    subtitle: "从第一次感染到独立完成一轮生存。",
+    tag: "生化感染",
+    order: "sequential",
+    icon: Gamepad2,
+    accent: "from-emerald-500 to-teal-600",
+    footer: "按顺序解锁；前置任务完成后自动开放下一步。",
+  },
+  {
+    id: "ttt-rookie",
+    title: "TTT · 见习探员",
+    subtitle: "自由完成身份推理、调查和阵营目标。",
+    tag: "匪镇谍影",
+    order: "parallel",
+    icon: Target,
+    accent: "from-violet-500 to-fuchsia-600",
+    footer: "组内任务没有先后顺序，可以选择喜欢的目标推进。",
+  },
+]
+
+const demoEventGroups: DemoTaskGroup[] = [
   {
     id: "map-conquest",
     title: "地图征服计划 · 雾都篇",
     subtitle: "完成指定地图的阶段挑战，逐步解锁整组奖励。",
-    mode: "ZM / ZE",
+    tag: "ZM / ZE",
     deadline: "剩余 6 天",
+    order: "sequential",
     icon: MapPinned,
     accent: "from-cyan-500 to-blue-600",
   },
@@ -95,8 +132,9 @@ const demoEventGroups: DemoEventGroup[] = [
     id: "containment-week",
     title: "SCP 收容行动周",
     subtitle: "参与收容行动并完成阶段目标。",
-    mode: "SCP",
+    tag: "SCP",
     deadline: "剩余 3 天",
+    order: "parallel",
     icon: TimerReset,
     accent: "from-violet-500 to-fuchsia-600",
   },
@@ -106,6 +144,7 @@ const demoTasks: DemoTask[] = [
   {
     id: "onboarding-account",
     category: "onboarding",
+    groupId: "launcher-basics",
     title: "确认你的身份",
     description: "识别当前 Steam 账号并完成登陆器登录。",
     current: 1,
@@ -120,6 +159,7 @@ const demoTasks: DemoTask[] = [
   {
     id: "onboarding-server",
     category: "onboarding",
+    groupId: "launcher-basics",
     title: "选择第一片战场",
     description: "从服务器列表进入任意 STARCS 服务器。",
     current: 1,
@@ -136,6 +176,7 @@ const demoTasks: DemoTask[] = [
   {
     id: "onboarding-match",
     category: "onboarding",
+    groupId: "launcher-basics",
     title: "完成第一局游戏",
     description: "留在服务器中，直到一局游戏正常结算。",
     current: 0,
@@ -149,6 +190,7 @@ const demoTasks: DemoTask[] = [
   {
     id: "onboarding-inventory",
     category: "onboarding",
+    groupId: "launcher-basics",
     title: "整理你的库存",
     description: "打开库存并查看任意一件物品的详情。",
     current: 0,
@@ -162,6 +204,7 @@ const demoTasks: DemoTask[] = [
   {
     id: "onboarding-loadout",
     category: "onboarding",
+    groupId: "launcher-basics",
     title: "保存第一套配置",
     description: "为任意模式装备一件武器或角色外观。",
     current: 0,
@@ -174,6 +217,90 @@ const demoTasks: DemoTask[] = [
       { kind: "item", amount: 1, label: "新手名片" },
     ],
     hint: "完成整组新手旅程后获得最终奖励，不影响每日和赛季任务进度。",
+  },
+  {
+    id: "onboarding-zm-enter",
+    category: "onboarding",
+    groupId: "zm-rookie",
+    title: "进入生化战场",
+    description: "首次进入任意 ZM 生化感染服务器。",
+    current: 1,
+    target: 1,
+    unit: "次",
+    icon: Gamepad2,
+    accent: "from-emerald-500 to-teal-600",
+    rewards: [{ kind: "starlight", amount: 60, label: "星光" }],
+    hint: "这是模式新手旅程的第一步，完成后可以直接在折叠状态领取。",
+  },
+  {
+    id: "onboarding-zm-survive",
+    category: "onboarding",
+    groupId: "zm-rookie",
+    title: "完成一次生存",
+    description: "以人类阵营存活到本回合结束。",
+    current: 0,
+    target: 1,
+    unit: "回合",
+    icon: Trophy,
+    accent: "from-lime-500 to-emerald-600",
+    rewards: [{ kind: "experience", amount: 120, label: "赛季经验" }],
+    hint: "第一步完成后解锁，以服务器正常回合结算为准。",
+  },
+  {
+    id: "onboarding-zm-shop",
+    category: "onboarding",
+    groupId: "zm-rookie",
+    title: "使用模式商店",
+    description: "在 ZM 对局中购买并使用一次模式道具。",
+    current: 0,
+    target: 1,
+    unit: "次",
+    icon: Gift,
+    accent: "from-teal-500 to-cyan-600",
+    rewards: [{ kind: "item", amount: 1, label: "ZM 新手卡" }],
+    hint: "完成一次生存后解锁，具体道具不限。",
+  },
+  {
+    id: "onboarding-ttt-rounds",
+    category: "onboarding",
+    groupId: "ttt-rookie",
+    title: "参与身份对局",
+    description: "完整参与 3 局 TTT 模式。",
+    current: 1,
+    target: 3,
+    unit: "局",
+    icon: Gamepad2,
+    accent: "from-violet-500 to-fuchsia-600",
+    rewards: [{ kind: "starlight", amount: 80, label: "星光" }],
+    hint: "无顺序任务可以与组内其他目标同时推进。",
+  },
+  {
+    id: "onboarding-ttt-investigate",
+    category: "onboarding",
+    groupId: "ttt-rookie",
+    title: "协助调查",
+    description: "作为侦探或好人调查 2 次尸体。",
+    current: 0,
+    target: 2,
+    unit: "次",
+    icon: Target,
+    accent: "from-indigo-500 to-violet-600",
+    rewards: [{ kind: "experience", amount: 100, label: "赛季经验" }],
+    hint: "该目标没有前置任务，可以立即开始推进。",
+  },
+  {
+    id: "onboarding-ttt-roles",
+    category: "onboarding",
+    groupId: "ttt-rookie",
+    title: "认识不同阵营",
+    description: "分别以两个不同阵营完成一局游戏。",
+    current: 1,
+    target: 2,
+    unit: "种阵营",
+    icon: Medal,
+    accent: "from-fuchsia-500 to-pink-600",
+    rewards: [{ kind: "item", amount: 1, label: "见习探员名片" }],
+    hint: "阵营可以任意选择，不要求按固定顺序完成。",
   },
   {
     id: "daily-check-in",
@@ -457,6 +584,7 @@ export function TaskCenterPage({
   onNavigateHome: () => void
 }) {
   const [activeCategory, setActiveCategory] = useState<TaskCategory>("onboarding")
+  const [expandedGroupIDs, setExpandedGroupIDs] = useState<Set<string>>(() => new Set(["launcher-basics"]))
   const [claimedTaskIDs, setClaimedTaskIDs] = useState<Set<string>>(
     () => new Set(demoTasks.filter((task) => task.claimedByDefault).map((task) => task.id)),
   )
@@ -469,14 +597,15 @@ export function TaskCenterPage({
   const isClaimed = (task: DemoTask) => claimedTaskIDs.has(task.id)
   const claimableTasks = visibleTasks.filter((task) => isCompleted(task) && !isClaimed(task))
   const dailyCompleted = demoTasks.filter((task) => task.category === "daily" && isCompleted(task)).length
-  const onboardingCompleted = demoTasks.filter((task) => task.category === "onboarding" && isCompleted(task)).length
+  const onboardingTasks = demoTasks.filter((task) => task.category === "onboarding")
+  const onboardingCompleted = onboardingTasks.filter((task) => isCompleted(task)).length
   const totalClaimed = claimedTaskIDs.size
   const totalClaimable = demoTasks.filter((task) => isCompleted(task) && !isClaimed(task)).length
-  const recommendedOnboardingTask = demoTasks.find((task) => task.category === "onboarding" && isCompleted(task) && !isClaimed(task))
-    ?? demoTasks.find((task) => task.category === "onboarding" && !isCompleted(task))
-  const categoryCount = (category: TaskCategory) => category === "event"
-    ? demoEventGroups.length
-    : demoTasks.filter((task) => task.category === category).length
+  const categoryCount = (category: TaskCategory) => {
+    if (category === "onboarding") return demoOnboardingGroups.length
+    if (category === "event") return demoEventGroups.length
+    return demoTasks.filter((task) => task.category === category).length
+  }
 
   function claimTask(task: DemoTask) {
     if (!isCompleted(task) || isClaimed(task)) return
@@ -494,10 +623,93 @@ export function TaskCenterPage({
     setNotice(`已模拟领取 ${claimableTasks.length} 项奖励；接入后端后将改为真实发放。`)
   }
 
+  function claimTaskGroup(group: DemoTaskGroup) {
+    const tasks = demoTasks.filter((task) => task.groupId === group.id && isCompleted(task) && !isClaimed(task))
+    if (tasks.length === 0) return
+    setClaimedTaskIDs((current) => {
+      const next = new Set(current)
+      tasks.forEach((task) => next.add(task.id))
+      return next
+    })
+    setNotice(`已模拟完成「${group.title}」中的 ${tasks.length} 项任务并领取奖励。`)
+  }
+
+  function toggleTaskGroup(groupID: string) {
+    setExpandedGroupIDs((current) => {
+      const next = new Set(current)
+      if (next.has(groupID)) next.delete(groupID)
+      else next.add(groupID)
+      return next
+    })
+  }
+
   function resetDemo() {
     setClaimedTaskIDs(new Set(demoTasks.filter((task) => task.claimedByDefault).map((task) => task.id)))
+    setExpandedGroupIDs(new Set(["launcher-basics"]))
     setSelectedTaskID(null)
     setNotice("演示状态已重置。")
+  }
+
+  function renderTaskGroup(group: DemoTaskGroup, kind: "onboarding" | "event") {
+    const groupTasks = demoTasks.filter((task) => task.groupId === group.id)
+    const completedCount = groupTasks.filter((task) => isCompleted(task)).length
+    const claimableCount = groupTasks.filter((task) => isCompleted(task) && !isClaimed(task)).length
+    const currentTaskIndex = group.order === "sequential" ? groupTasks.findIndex((task) => !isCompleted(task)) : -1
+    const currentTask = currentTaskIndex >= 0 ? groupTasks[currentTaskIndex] : null
+    const expanded = expandedGroupIDs.has(group.id)
+    const panelID = `task-group-panel-${group.id}`
+    const Icon = group.icon
+
+    return (
+      <article key={group.id} className={cn("task-collapsible-group", kind === "onboarding" ? "task-onboarding-group" : "task-event-group")}>
+        <div className="task-collapsible-header">
+          <button type="button" className="task-group-toggle" aria-expanded={expanded} aria-controls={panelID} onClick={() => toggleTaskGroup(group.id)}>
+            <span className={cn("task-event-icon bg-gradient-to-br", group.accent)}><Icon /></span>
+            <span className="min-w-0 flex-1 text-left">
+              <span className="flex flex-wrap items-center gap-2"><span className="font-semibold">{group.title}</span><Badge variant="outline">{group.tag}</Badge><Badge variant="outline">{group.order === "sequential" ? "按顺序" : "自由完成"}</Badge></span>
+              <span className="mt-1 block truncate text-xs text-muted-foreground">{group.subtitle}{group.deadline ? ` · ${group.deadline}` : ""}</span>
+            </span>
+            <span className="task-group-fold-summary">
+              {group.order === "sequential" ? currentTask ? <>
+                <span className="task-group-summary-label">当前任务</span>
+                <span className="task-group-summary-title">{currentTask.title}</span>
+                <span className="task-group-summary-progress"><Progress value={taskProgress(currentTask)} /><span>{progressLabel(currentTask.current)}/{progressLabel(currentTask.target)} {currentTask.unit}</span></span>
+              </> : <><span className="task-group-summary-label">任务进度</span><span className="task-group-summary-title">全部目标已完成</span><span className="text-xs text-emerald-600 dark:text-emerald-300">{completedCount}/{groupTasks.length}</span></> : <>
+                <span className="task-group-summary-label">任务完成</span>
+                <span className="task-group-summary-count">{completedCount}<small>/{groupTasks.length}</small></span>
+              </>}
+            </span>
+            <ChevronDown className={cn("task-group-chevron", expanded && "task-group-chevron-open")} />
+          </button>
+          {claimableCount > 0 && <Button size="sm" className="task-group-claim" onClick={() => claimTaskGroup(group)}><Gift />完成任务{claimableCount > 1 ? ` ${claimableCount}` : ""}</Button>}
+        </div>
+
+        {expanded && (
+          <div id={panelID} className="task-group-panel">
+            <div className="task-event-milestones">
+              {groupTasks.map((task, index) => {
+                const completed = isCompleted(task)
+                const claimed = isClaimed(task)
+                const locked = !completed && group.order === "sequential" && currentTaskIndex >= 0 && index > currentTaskIndex
+                const status = claimed ? "已领取" : completed ? "可领取" : locked ? "未解锁" : "进行中"
+                return (
+                  <button key={task.id} type="button" className={cn("task-event-milestone group", completed && !claimed && "task-event-milestone-ready", claimed && "task-event-milestone-claimed", locked && "task-event-milestone-locked")} onClick={() => setSelectedTaskID(task.id)}>
+                    <span className={cn("task-event-step", completed && "task-event-step-complete")}>{claimed ? <Check /> : index + 1}</span>
+                    <span className="min-w-0 flex-1 text-left"><span className="block text-sm font-medium">{task.title}</span><span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{task.description}</span></span>
+                    <span className="hidden flex-wrap justify-end gap-1.5 md:flex">{task.rewards.map((reward, rewardIndex) => <RewardChip key={`${reward.kind}-${rewardIndex}`} reward={reward} compact />)}</span>
+                    <Badge variant="outline" className={cn("shrink-0", claimed ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300" : completed ? "border-primary/25 bg-primary/10 text-primary" : "")}>
+                      {locked && <LockKeyhole />}{status}
+                    </Badge>
+                    <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                  </button>
+                )
+              })}
+            </div>
+            {group.footer && <div className="task-guide-footer"><Gift />{group.footer}</div>}
+          </div>
+        )}
+      </article>
+    )
   }
 
   return (
@@ -529,7 +741,7 @@ export function TaskCenterPage({
         <div className="task-overview-icon"><ListChecks /></div>
         <div className="min-w-0 flex-1">
           <div className="font-semibold">现在有 {totalClaimable} 项奖励可以领取</div>
-          <div className="mt-1 text-xs text-muted-foreground">新手旅程 {onboardingCompleted}/5 · 今日任务 {dailyCompleted}/4 · 已领取 {totalClaimed} 项</div>
+          <div className="mt-1 text-xs text-muted-foreground">新手任务 {onboardingCompleted}/{onboardingTasks.length} · 今日任务 {dailyCompleted}/4 · 已领取 {totalClaimed} 项</div>
         </div>
         <div className="hidden items-center gap-2 sm:flex"><Badge variant="outline"><Flame />连续活跃 5 天</Badge><Badge variant="outline"><Clock3 />每日 04:00 刷新</Badge></div>
       </section>
@@ -547,79 +759,11 @@ export function TaskCenterPage({
 
       <div className="mt-4 grid items-start gap-5 lg:grid-cols-[minmax(0,1.65fr)_minmax(280px,.72fr)]">
         <section className="space-y-3" aria-label={categoryOptions.find((option) => option.id === activeCategory)?.label}>
-          {activeCategory === "onboarding" ? (
-            <article className="task-onboarding-group">
-              <div className="task-guide-header">
-                <div className="task-guide-symbol"><Sparkles /></div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-semibold tracking-tight">初来乍到</h2><Badge className="bg-primary text-white">推荐</Badge></div>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">按顺序熟悉登录、进服、库存和装备；每一步都能单独领取奖励。</p>
-                </div>
-                <div className="text-right"><div className="text-lg font-semibold tabular-nums">{onboardingCompleted}/5</div><div className="text-[11px] text-muted-foreground">已完成</div></div>
-              </div>
-              <div className="task-guide-progress">
-                <div className="flex items-center justify-between gap-3 text-xs"><span className="truncate text-muted-foreground">下一步：{recommendedOnboardingTask?.title ?? "旅程已完成"}</span><span className="shrink-0 font-medium">{Math.round((onboardingCompleted / 5) * 100)}%</span></div>
-                <Progress value={(onboardingCompleted / 5) * 100} className="mt-2 h-1.5" />
-              </div>
-              <div className="task-event-milestones">
-                {visibleTasks.map((task, index) => {
-                  const completed = isCompleted(task)
-                  const claimed = isClaimed(task)
-                  return (
-                    <button key={task.id} type="button" className={cn("task-event-milestone group", completed && !claimed && "task-event-milestone-ready", claimed && "task-event-milestone-claimed")} onClick={() => setSelectedTaskID(task.id)}>
-                      <span className={cn("task-event-step", completed && "task-event-step-complete")}>{claimed ? <Check /> : index + 1}</span>
-                      <span className="min-w-0 flex-1 text-left"><span className="block text-sm font-medium">{task.title}</span><span className="mt-0.5 block truncate text-xs text-muted-foreground">{task.description}</span></span>
-                      <span className="hidden flex-wrap justify-end gap-1.5 md:flex">{task.rewards.map((reward, rewardIndex) => <RewardChip key={`${reward.kind}-${rewardIndex}`} reward={reward} compact />)}</span>
-                      <Badge variant="outline" className={cn("shrink-0", claimed ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300" : completed ? "border-primary/25 bg-primary/10 text-primary" : "")}>
-                        {claimed ? "已领取" : completed ? "可领取" : "未完成"}
-                      </Badge>
-                      <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                    </button>
-                  )
-                })}
-              </div>
-              <div className="task-guide-footer"><Gift />完成全部新手任务后，再获得新手名片与 25 星尘。</div>
-            </article>
-          ) : activeCategory === "event" ? demoEventGroups.map((group) => {
-            const Icon = group.icon
-            const groupTasks = visibleTasks.filter((task) => task.groupId === group.id)
-            const groupCurrent = Math.max(...groupTasks.map((task) => task.current))
-            const groupTarget = Math.max(...groupTasks.map((task) => task.target))
-            const completedStages = groupTasks.filter((task) => isCompleted(task)).length
-            return (
-              <article key={group.id} className="task-event-group">
-                <div className="task-event-header">
-                  <div className={cn("task-event-icon bg-gradient-to-br", group.accent)}><Icon /></div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2"><h2 className="font-semibold">{group.title}</h2><Badge variant="outline">{group.mode}</Badge></div>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{group.subtitle}</p>
-                  </div>
-                  <div className="task-event-deadline"><Clock3 />{group.deadline}</div>
-                </div>
-                <div className="task-event-overview">
-                  <div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">任务组进度 · {completedStages}/{groupTasks.length} 个阶段</span><span className="font-medium tabular-nums">{groupCurrent} / {groupTarget} 次</span></div>
-                  <Progress value={Math.min(100, (groupCurrent / groupTarget) * 100)} className="mt-2 h-1.5" />
-                </div>
-                <div className="task-event-milestones">
-                  {groupTasks.map((task, index) => {
-                    const completed = isCompleted(task)
-                    const claimed = isClaimed(task)
-                    return (
-                      <button key={task.id} type="button" className={cn("task-event-milestone group", completed && !claimed && "task-event-milestone-ready", claimed && "task-event-milestone-claimed")} onClick={() => setSelectedTaskID(task.id)}>
-                        <span className={cn("task-event-step", completed && "task-event-step-complete")}>{claimed ? <Check /> : index + 1}</span>
-                        <span className="min-w-0 flex-1 text-left"><span className="block text-sm font-medium">{task.title}</span><span className="mt-0.5 block text-xs text-muted-foreground">{task.description}</span></span>
-                        <span className="hidden flex-wrap justify-end gap-1.5 sm:flex">{task.rewards.map((reward, rewardIndex) => <RewardChip key={`${reward.kind}-${rewardIndex}`} reward={reward} compact />)}</span>
-                        <Badge variant="outline" className={cn("shrink-0", claimed ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300" : completed ? "border-primary/25 bg-primary/10 text-primary" : "")}>
-                          {claimed ? "已领取" : completed ? "可领取" : `${progressLabel(task.current)}/${progressLabel(task.target)}`}
-                        </Badge>
-                        <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                      </button>
-                    )
-                  })}
-                </div>
-              </article>
-            )
-          }) : visibleTasks.map((task) => {
+          {activeCategory === "onboarding"
+            ? demoOnboardingGroups.map((group) => renderTaskGroup(group, "onboarding"))
+            : activeCategory === "event"
+              ? demoEventGroups.map((group) => renderTaskGroup(group, "event"))
+              : visibleTasks.map((task) => {
             const Icon = task.icon
             const claimed = isClaimed(task)
             const completed = isCompleted(task)

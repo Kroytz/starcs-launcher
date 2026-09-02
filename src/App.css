@@ -185,15 +185,27 @@ button { cursor: pointer; }
 .task-overview-icon { display: grid; width: 42px; height: 42px; flex: none; place-items: center; border-radius: 12px; color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 12%, transparent); }
 .task-overview-icon svg { width: 19px; height: 19px; }
 .task-onboarding-group { overflow: hidden; border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--border)); border-radius: 16px; background: color-mix(in srgb, var(--card) 96%, transparent); box-shadow: 0 16px 44px rgb(15 23 42 / 8%); }
-.task-guide-header { display: flex; align-items: flex-start; gap: 14px; padding: 18px 18px 15px; }
-.task-guide-symbol { display: grid; width: 46px; height: 46px; flex: none; place-items: center; border-radius: 14px; color: white; background: linear-gradient(145deg, var(--color-primary), var(--color-secondary)); box-shadow: 0 10px 24px color-mix(in srgb, var(--color-primary) 28%, transparent); }
-.task-guide-symbol svg { width: 21px; height: 21px; }
-.task-guide-progress { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 11px 18px; background: color-mix(in srgb, var(--color-primary) 4%, transparent); }
 .task-guide-footer { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--border); padding: 10px 16px; color: var(--muted-foreground); background: color-mix(in srgb, var(--color-primary) 3%, transparent); font-size: 11px; }
 .task-guide-footer svg { width: 14px; height: 14px; color: var(--color-primary); }
 .task-pass-card { border-color: color-mix(in srgb, var(--color-primary) 22%, var(--border)); background: linear-gradient(145deg, color-mix(in srgb, var(--color-primary) 6%, var(--card)), color-mix(in srgb, var(--color-secondary) 5%, var(--card))); }
 .task-pass-medal { display: grid; width: 42px; height: 42px; place-items: center; border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent); border-radius: 13px; color: var(--color-primary); background: color-mix(in srgb, var(--card) 72%, transparent); box-shadow: 0 8px 22px rgb(15 23 42 / 7%); backdrop-filter: blur(12px); }
 .task-pass-medal svg { width: 20px; height: 20px; }
+.task-collapsible-group { position: relative; }
+.task-collapsible-header { display: flex; align-items: center; }
+.task-group-toggle { display: flex; min-width: 0; flex: 1; align-items: center; gap: 13px; border: 0; padding: 15px 14px 15px 16px; color: inherit; background: transparent; text-align: left; transition: background-color 150ms ease, transform 80ms ease; }
+.task-group-toggle:hover { background: color-mix(in srgb, var(--color-primary) 4%, transparent); }
+.task-group-toggle:active { transform: scale(.996); }
+.task-group-fold-summary { display: grid; width: 210px; flex: none; gap: 2px; border-left: 1px solid var(--border); padding-left: 14px; }
+.task-group-summary-label { color: var(--muted-foreground); font-size: 10px; font-weight: 600; letter-spacing: .06em; }
+.task-group-summary-title { overflow: hidden; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.task-group-summary-progress { display: flex; align-items: center; gap: 8px; color: var(--muted-foreground); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.task-group-summary-progress > :first-child { width: 92px; height: 4px; }
+.task-group-summary-count { font-size: 22px; font-weight: 650; line-height: 1.05; letter-spacing: -.02em; }
+.task-group-summary-count small { color: var(--muted-foreground); font-size: 12px; font-weight: 500; }
+.task-group-chevron { width: 18px; height: 18px; flex: none; color: var(--muted-foreground); transition: transform 180ms ease; }
+.task-group-chevron-open { transform: rotate(180deg); }
+.task-group-claim { flex: none; margin-right: 14px; }
+.task-group-panel { border-top: 1px solid var(--border); background: color-mix(in srgb, var(--color-primary) 2%, transparent); }
 .task-category-tabs { display: flex; width: fit-content; max-width: 100%; gap: 4px; overflow-x: auto; border: 1px solid var(--border); border-radius: 11px; padding: 4px; background: color-mix(in srgb, var(--card) 88%, transparent); scrollbar-width: none; }
 .task-category-tabs::-webkit-scrollbar { display: none; }
 .task-category-tab { display: flex; min-width: max-content; align-items: center; gap: 8px; border: 0; border-radius: 8px; padding: 8px 12px; color: var(--muted-foreground); background: transparent; font-size: 13px; font-weight: 500; transition: color 150ms ease, background-color 150ms ease, box-shadow 150ms ease; }
@@ -210,18 +222,15 @@ button { cursor: pointer; }
 .task-card-icon { display: grid; width: 48px; height: 48px; flex: none; place-items: center; border-radius: 14px; color: white; box-shadow: 0 8px 22px rgb(15 23 42 / 16%); }
 .task-card-icon svg { width: 21px; height: 21px; }
 .task-event-group { overflow: hidden; border: 1px solid var(--border); border-radius: 15px; background: color-mix(in srgb, var(--card) 95%, transparent); box-shadow: 0 10px 32px rgb(15 23 42 / 6%); }
-.task-event-header { display: flex; align-items: flex-start; gap: 14px; padding: 17px 17px 14px; }
 .task-event-icon { display: grid; width: 46px; height: 46px; flex: none; place-items: center; border-radius: 13px; color: white; box-shadow: 0 8px 20px rgb(15 23 42 / 16%); }
 .task-event-icon svg { width: 21px; height: 21px; }
-.task-event-deadline { display: flex; flex: none; align-items: center; gap: 5px; border-radius: 999px; padding: 5px 9px; color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 10%, transparent); font-size: 11px; font-weight: 600; }
-.task-event-deadline svg { width: 13px; height: 13px; }
-.task-event-overview { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 11px 17px; background: color-mix(in srgb, var(--color-primary) 3%, transparent); }
 .task-event-milestones { padding: 5px; }
 .task-event-milestone { display: flex; width: 100%; align-items: center; gap: 11px; border: 1px solid transparent; border-radius: 10px; padding: 10px 11px; color: inherit; background: transparent; transition: border-color 150ms ease, background-color 150ms ease; }
 .task-event-milestone:hover { border-color: var(--border); background: color-mix(in srgb, var(--color-primary) 5%, transparent); }
 .task-event-milestone:active { transform: scale(.993); transition-duration: 80ms; }
 .task-event-milestone-ready { background: color-mix(in srgb, var(--color-primary) 5%, transparent); }
 .task-event-milestone-claimed { opacity: .72; }
+.task-event-milestone-locked { opacity: .52; }
 .task-event-step { display: grid; width: 27px; height: 27px; flex: none; place-items: center; border: 1px solid var(--border); border-radius: 50%; color: var(--muted-foreground); background: var(--card); font-size: 11px; font-weight: 700; }
 .task-event-step svg { width: 13px; height: 13px; }
 .task-event-step-complete { border-color: color-mix(in srgb, #10b981 32%, var(--border)); color: #059669; background: color-mix(in srgb, #10b981 10%, var(--card)); }
@@ -257,16 +266,18 @@ button { cursor: pointer; }
   .task-overview-bar { padding: 12px; }
   .task-card { align-items: flex-start; gap: 12px; padding: 14px; }
   .task-card-icon { width: 40px; height: 40px; border-radius: 11px; }
-  .task-guide-header { padding: 15px; }
-  .task-guide-symbol { width: 40px; height: 40px; border-radius: 12px; }
-  .task-event-header { flex-wrap: wrap; }
-  .task-event-deadline { margin-left: 60px; }
+  .task-collapsible-header { display: block; }
+  .task-group-toggle { width: 100%; flex-wrap: wrap; padding: 13px 12px; }
+  .task-group-fold-summary { order: 5; width: calc(100% - 59px); margin-left: 59px; border-left: 0; padding-top: 7px; padding-left: 0; }
+  .task-group-chevron { margin-left: auto; }
+  .task-group-claim { width: calc(100% - 24px); margin: 0 12px 12px; }
+  .task-event-icon { width: 40px; height: 40px; border-radius: 11px; }
   .task-event-milestone { gap: 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .task-category-tab, .task-card, .task-event-milestone { transition: none; }
-  .task-category-tab:active, .task-card:active, .task-event-milestone:active { transform: none; }
+  .task-category-tab, .task-card, .task-event-milestone, .task-group-toggle, .task-group-chevron { transition: none; }
+  .task-category-tab:active, .task-card:active, .task-event-milestone:active, .task-group-toggle:active { transform: none; }
 }
 
 @media (prefers-reduced-transparency: reduce) {
