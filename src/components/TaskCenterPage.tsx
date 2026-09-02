@@ -663,7 +663,7 @@ export function TaskCenterPage({
     return (
       <article key={group.id} className={cn("task-collapsible-group", kind === "onboarding" ? "task-onboarding-group" : "task-event-group")}>
         <div className="task-collapsible-header">
-          <button type="button" className="task-group-toggle" aria-expanded={expanded} aria-controls={panelID} onClick={() => toggleTaskGroup(group.id)}>
+          <button type="button" className={cn("task-group-toggle", claimableCount > 0 && "task-group-toggle-has-claim")} aria-expanded={expanded} aria-controls={panelID} onClick={() => toggleTaskGroup(group.id)}>
             <span className={cn("task-event-icon bg-gradient-to-br", group.accent)}><Icon /></span>
             <span className="min-w-0 flex-1 text-left">
               <span className="flex flex-wrap items-center gap-2"><span className="font-semibold">{group.title}</span><Badge variant="outline">{group.tag}</Badge><Badge variant="outline">{group.order === "sequential" ? "按顺序" : "自由完成"}</Badge></span>
@@ -679,11 +679,10 @@ export function TaskCenterPage({
                 <span className="task-group-summary-count">{completedCount}<small>/{groupTasks.length}</small></span>
               </>}
             </span>
-          </button>
-          {claimableCount > 0 && <Button size="sm" className="task-group-claim" onClick={() => claimTaskGroup(group)}><Gift />完成任务{claimableCount > 1 ? ` ${claimableCount}` : ""}</Button>}
-          <button type="button" className="task-group-expand" aria-label={expanded ? `折叠${group.title}` : `展开${group.title}`} aria-expanded={expanded} aria-controls={panelID} onClick={() => toggleTaskGroup(group.id)}>
+            {claimableCount > 0 && <span className="task-group-claim-space" aria-hidden="true" />}
             <ChevronDown className={cn("task-group-chevron", expanded && "task-group-chevron-open")} />
           </button>
+          {claimableCount > 0 && <Button size="sm" className="task-group-claim" onClick={() => claimTaskGroup(group)}><Gift />完成任务{claimableCount > 1 ? ` ${claimableCount}` : ""}</Button>}
         </div>
 
         {expanded && (
