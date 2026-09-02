@@ -5,6 +5,7 @@ use std::{
 };
 
 mod steam;
+pub mod workshop;
 
 // Tauri embeds the current frontend dist into the release binary during compilation.
 
@@ -922,7 +923,10 @@ pub fn run() {
             steam::get_local_steam_account,
             steam::load_remembered_password,
             steam::update_remembered_password,
-            steam::launch_cs2_and_connect
+            steam::launch_cs2_and_connect,
+            workshop::prefetch_workshop_packs,
+            workshop::stop_workshop_prefetch,
+            workshop::cancel_workshop_prefetch
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

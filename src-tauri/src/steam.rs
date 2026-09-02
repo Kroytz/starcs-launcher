@@ -88,6 +88,8 @@ mod windows_impl {
     }
 
     pub fn launch_cs2_and_connect(address: &str) -> Result<(), String> {
+        crate::workshop::release_steam_for_cs2_launch();
+
         address
             .parse::<SocketAddr>()
             .map_err(|_| "服务器地址格式无效".to_string())?;

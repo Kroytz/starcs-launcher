@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core"
+import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 
 export type LauncherAnnouncement = {
   id: string
@@ -170,6 +171,27 @@ export type LauncherWorkshopPack = {
   steamUrl: string
 }
 
+export type WorkshopSyncProgress = {
+  workshopId: string
+  title: string
+  phase: "checking" | "downloading" | "ready" | "error"
+  bytesDownloaded: number
+  bytesTotal: number
+  message?: string | null
+}
+
+export type WorkshopPrefetchFailure = {
+  workshopId: string
+  title: string
+  message: string
+}
+
+export type WorkshopPrefetchResult = {
+  ready: string[]
+  failed: WorkshopPrefetchFailure[]
+  cancelled: boolean
+}
+
 export type LauncherPurchaseHistoryItem = {
   id: number
   productName: string
@@ -229,6 +251,24 @@ export async function fetchLauncherBootstrap() {
 
 export async function fetchLauncherWorkshopPacks(mode: string) {
   return invoke<LauncherWorkshopPack[]>("fetch_launcher_workshop_packs", { mode })
+}
+
+export async function prefetchWorkshopPacks(packs: Array<{ workshopId: string; title: string }>) {
+  return invoke<WorkshopPrefetchResult>("prefetch_workshop_packs", { packs })
+}
+
+export async function stopWorkshopPrefetch() {
+  return invoke<void>("stop_workshop_prefetch")
+}
+
+export async function cancelWorkshopPrefetch() {
+  return invoke<void>("cancel_workshop_prefetch")
+}
+
+export function listenWorkshopSyncProgress(handler: (progress: WorkshopSyncProgress) => void): Promise<UnlistenFn> {
+  return listen<WorkshopSyncProgress>("workshop-sync-progress", (event) => {
+    handler(event.payload)
+  })
 }
 
 export async function loginLauncherAccount(steamId: string, password: string) {

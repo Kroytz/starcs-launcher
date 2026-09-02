@@ -2,5 +2,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
+    if std::env::args().nth(1).as_deref() == Some("--workshop-prefetch") {
+        star_launcher_lib::workshop::run_workshop_prefetch_cli();
+        return;
+    }
+
     star_launcher_lib::run()
 }

@@ -99,7 +99,10 @@ import {
   fetchLauncherBootstrap,
   fetchLauncherEquipment,
   fetchLauncherWorkshopPacks,
+  listenWorkshopSyncProgress,
   loginLauncherAccount,
+  prefetchWorkshopPacks,
+  stopWorkshopPrefetch,
   purchaseStardustItem,
   purchaseStoreItem,
   updateLauncherEquipment,
@@ -115,6 +118,7 @@ import {
   type LauncherSeasonPass,
   type LauncherStoreItem,
   type LauncherWorkshopPack,
+  type WorkshopSyncProgress,
   type StarLightEquipmentProfile,
 } from "@/lib/launcher-api"
 import {
@@ -124,6 +128,31 @@ import {
   type LocalSteamAccount,
 } from "@/lib/steam"
 import "./App.css"
+
+function workshopSyncLabel(progress?: WorkshopSyncProgress) {
+  if (!progress) return "等待预下载"
+  switch (progress.phase) {
+    case "checking":
+      return "检查本地缓存…"
+    case "downloading":
+      if (progress.bytesTotal > 0) {
+        const percent = Math.min(100, Math.round((progress.bytesDownloaded / progress.bytesTotal) * 100))
+        return `下载中 ${percent}%`
+      }
+      return "下载中…"
+    case "ready":
+      return "已缓存"
+    case "error":
+      return progress.message ?? "下载失败"
+    default:
+      return "处理中…"
+  }
+}
+
+function workshopSyncPercent(progress?: WorkshopSyncProgress) {
+  if (!progress || progress.phase !== "downloading" || progress.bytesTotal <= 0) return 0
+  return Math.min(100, Math.round((progress.bytesDownloaded / progress.bytesTotal) * 100))
+}
 
 function presentError(context: string, error: unknown, message: string) {
   console.error(`[StarCS Launcher] ${context}`, error)
@@ -440,6 +469,8 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
   const [resourcePacks, setResourcePacks] = useState<LauncherWorkshopPack[]>([])
   const [isResourceLoading, setIsResourceLoading] = useState(false)
   const [resourceDialogError, setResourceDialogError] = useState<string | null>(null)
+  const [workshopSync, setWorkshopSync] = useState<Record<string, WorkshopSyncProgress>>({})
+  const [isPrefetching, setIsPrefetching] = useState(false)
   const [joinError, setJoinError] = useState<string | null>(null)
   const initialFetchStarted = useRef(false)
 
@@ -493,11 +524,55 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
     setFavorites((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
   }
 
+  useEffect(() => {
+    if (!resourceDialogServer) return
+
+    let unlisten: (() => void) | undefined
+    void listenWorkshopSyncProgress((progress) => {
+      setWorkshopSync((current) => ({
+        ...current,
+        [progress.workshopId]: progress,
+      }))
+    }).then((dispose) => {
+      unlisten = dispose
+    })
+
+    return () => {
+      unlisten?.()
+    }
+  }, [resourceDialogServer])
+
+  async function startWorkshopPrefetch(packs: LauncherWorkshopPack[]) {
+    if (isPrefetching || packs.length === 0) return
+    setIsPrefetching(true)
+    setWorkshopSync({})
+    setResourceDialogError(null)
+    try {
+      const result = await prefetchWorkshopPacks(packs.map((pack) => ({
+        workshopId: pack.workshopId,
+        title: pack.title,
+      })))
+      if (result.cancelled) return
+      if (result.failed.length > 0 && result.ready.length === 0) {
+        setResourceDialogError(`资源预下载失败：${result.failed[0]?.message ?? "未知错误"}`)
+      }
+    } catch (error) {
+      setResourceDialogError(presentError("Workshop 资源预下载失败", error, "无法通过 Steam 预下载资源，可直接进服由服务器同步。"))
+    } finally {
+      setIsPrefetching(false)
+    }
+  }
+
   async function loadResourcePacks(server: Server) {
     setIsResourceLoading(true)
     setResourceDialogError(null)
+    setWorkshopSync({})
     try {
-      setResourcePacks(await fetchLauncherWorkshopPacks(server.mode))
+      const nextPacks = await fetchLauncherWorkshopPacks(server.mode)
+      setResourcePacks(nextPacks)
+      if (nextPacks.length > 0) {
+        void startWorkshopPrefetch(nextPacks)
+      }
     } catch (error) {
       setResourcePacks([])
       setResourceDialogError(presentError("读取创意工坊资源包失败", error, "资源包列表暂时无法获取，可重试或直接启动游戏。"))
@@ -509,7 +584,7 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
   function prepareJoin(server: Server) {
     setJoinError(null)
     if (isResourceReminderDismissed(server.mode)) {
-      void joinServer(server, false)
+      void joinServer(server)
       return
     }
     setResourceDialogServer(server)
@@ -526,18 +601,27 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
     }
   }
 
-  async function joinServer(server: Server, showErrorInDialog = true) {
-    if (joiningServerId) return
-    setJoiningServerId(server.id)
+  function closeResourceDialogUI() {
+    setResourceDialogServer(null)
+    setIsPrefetching(false)
     setResourceDialogError(null)
+  }
+
+  function dismissResourceDialog() {
+    closeResourceDialogUI()
+    void stopWorkshopPrefetch()
+  }
+
+  async function joinServer(server: Server) {
+    if (joiningServerId) return
+    closeResourceDialogUI()
+    await stopWorkshopPrefetch()
+    setJoiningServerId(server.id)
     setJoinError(null)
     try {
       await launchAndConnectServer(server.address)
-      setResourceDialogServer(null)
     } catch (error) {
-      const message = presentError("启动或连接 CS2 失败", error, "游戏启动或连接请求未能完成，请稍后重试。")
-      if (showErrorInDialog) setResourceDialogError(message)
-      else setJoinError(message)
+      setJoinError(presentError("启动或连接 CS2 失败", error, "游戏启动或连接请求未能完成，请稍后重试。"))
     } finally {
       setJoiningServerId(null)
     }
@@ -634,7 +718,7 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
               </div>
               <div className="mb-5 flex flex-wrap gap-2">{selected.tags.map((tag) => <Badge key={tag} variant="secondary">{tag}</Badge>)}</div>
               <Button size="lg" className="w-full" disabled={joiningServerId !== null} onClick={() => prepareJoin(selected)}><Gamepad2 />{joiningServerId ? "正在启动并等待 CS2…" : selected.status === "full" ? "尝试加入服务器" : "加入服务器"}</Button>
-              <p className="mt-2 text-center text-[11px] text-muted-foreground">从登录器启动时将强制使用 -worldwide，并在 CS2 初始化完成后连接。</p>
+              <p className="mt-2 text-center text-[11px] text-muted-foreground">从登录器启动时将尝试从 Steam 平台启动，并在 CS2 初始化完成后连接。</p>
               {joinError && <div className="mt-3 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300">{joinError}</div>}
             </CardContent>
           </Card>
@@ -643,38 +727,51 @@ function HomePage({ announcements, maps, backendError, isBackendLoading, onRetry
         )}
       </aside>
       </div>
-      <Dialog open={resourceDialogServer !== null} onOpenChange={(open) => { if (!open && joiningServerId === null) setResourceDialogServer(null) }}>
-        <DialogContent className="sm:max-w-[600px]" showCloseButton={joiningServerId === null}>
+      <Dialog open={resourceDialogServer !== null} onOpenChange={(open) => { if (!open) dismissResourceDialog() }}>
+        <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Package className="size-5 text-primary" />启动前准备资源</DialogTitle>
-            <DialogDescription>建议先订阅基础资源包和当前模式资源包，Steam 会在后台保持资源更新；订阅不是进入服务器的强制条件。</DialogDescription>
+            <DialogDescription>建议在 Steam 中订阅下方资源包：进服更快、版本自动更新。点击「Steam 打开」进入 Workshop 页面订阅即可。</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
             {isResourceLoading && <>{[0, 1].map((item) => <div key={item} className="flex items-center gap-3 rounded-xl border border-border p-4"><Skeleton className="size-10 rounded-lg" /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-36" /><Skeleton className="h-3 w-56" /></div><Skeleton className="h-9 w-28" /></div>)}</>}
-            {!isResourceLoading && resourcePacks.map((pack) => (
+            {!isResourceLoading && resourcePacks.map((pack) => {
+              const sync = workshopSync[pack.workshopId]
+              const syncPercent = workshopSyncPercent(sync)
+              return (
               <div key={pack.id} className="flex flex-col gap-3 rounded-xl border border-border bg-muted/20 p-4 sm:flex-row sm:items-center">
                 <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Package className="size-5" /></div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2"><span className="font-medium">{pack.title}</span><Badge variant={pack.kind === "base" ? "secondary" : "outline"}>{pack.kind === "base" ? "基础资源" : `${modeLabels[pack.mode] ?? pack.mode}`}</Badge></div>
+                  <div className="flex flex-wrap items-center gap-2"><span className="font-medium">{pack.title}</span><Badge variant={pack.kind === "base" ? "secondary" : "outline"}>{pack.kind === "base" ? "基础资源" : `${modeLabels[pack.mode] ?? pack.mode}`}</Badge>{sync?.phase === "ready" && <Badge variant="success">已缓存</Badge>}{sync?.phase === "error" && <Badge variant="outline">失败</Badge>}</div>
                   <p className="mt-1 text-xs text-muted-foreground">{pack.description || `Workshop ${pack.workshopId}`}</p>
+                  {(isPrefetching || sync) && (
+                    <div className="mt-2 space-y-1">
+                      <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                        <span>{workshopSyncLabel(sync)}</span>
+                        {sync?.phase === "downloading" && sync.bytesTotal > 0 && <span>{sync.bytesDownloaded}/{sync.bytesTotal}</span>}
+                      </div>
+                      <Progress value={sync?.phase === "ready" ? 100 : syncPercent} />
+                    </div>
+                  )}
                 </div>
-                <Button variant="outline" size="sm" onClick={() => void openWorkshopPack(pack)}><ExternalLink />Steam 打开</Button>
+                <Button variant="outline" size="sm" disabled={isPrefetching} onClick={() => void openWorkshopPack(pack)}><ExternalLink />Steam 打开</Button>
               </div>
-            ))}
+            )})}
             {!isResourceLoading && resourcePacks.length === 0 && !resourceDialogError && <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">当前模式暂未配置资源包，可直接启动游戏。</div>}
             {resourceDialogError && <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300">{resourceDialogError}</div>}
           </div>
 
           <DialogFooter>
             {resourceDialogServer && (
-              <Button variant="ghost" disabled={joiningServerId !== null} className="sm:mr-auto text-muted-foreground" onClick={() => { dismissResourceReminder(resourceDialogServer.mode); void joinServer(resourceDialogServer) }}>
+              <Button variant="ghost" className="sm:mr-auto text-muted-foreground" onClick={() => { dismissResourceReminder(resourceDialogServer.mode); void joinServer(resourceDialogServer) }}>
                 本模式不再提醒
               </Button>
             )}
-            <Button variant="outline" disabled={joiningServerId !== null} onClick={() => { if (resourceDialogServer) void joinServer(resourceDialogServer) }}>稍后再说</Button>
-            {resourceDialogError && resourcePacks.length === 0 && resourceDialogServer && !joiningServerId && <Button variant="outline" disabled={isResourceLoading} onClick={() => void loadResourcePacks(resourceDialogServer)}><RefreshCw className={cn(isResourceLoading && "animate-spin")} />重试加载</Button>}
-            <Button disabled={!resourceDialogServer || joiningServerId !== null} onClick={() => { if (!resourceDialogServer) return; void joinServer(resourceDialogServer) }}><Gamepad2 />{joiningServerId ? "正在启动并等待 CS2…" : "继续启动"}</Button>
+            <Button variant="outline" onClick={() => { if (resourceDialogServer) void joinServer(resourceDialogServer) }}>稍后再说</Button>
+            {resourceDialogError && resourcePacks.length === 0 && resourceDialogServer && <Button variant="outline" disabled={isResourceLoading} onClick={() => void loadResourcePacks(resourceDialogServer)}><RefreshCw className={cn(isResourceLoading && "animate-spin")} />重试加载</Button>}
+            {resourcePacks.length > 0 && <Button variant="outline" disabled={isPrefetching} onClick={() => void startWorkshopPrefetch(resourcePacks)}><RefreshCw className={cn(isPrefetching && "animate-spin")} />{isPrefetching ? "预下载中…" : "重新预下载"}</Button>}
+            <Button disabled={!resourceDialogServer} onClick={() => { if (!resourceDialogServer) return; void joinServer(resourceDialogServer) }}><Gamepad2 />继续启动</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

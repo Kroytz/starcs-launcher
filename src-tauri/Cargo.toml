@@ -28,5 +28,6 @@ reqwest = { version = "0.13", features = ["json", "query"] }
 
 [target.'cfg(windows)'.dependencies]
 base64 = "0.22"
+steamworks = "0.13"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_Diagnostics_ToolHelp", "Win32_UI_WindowsAndMessaging"] }
 winreg = "0.55"
