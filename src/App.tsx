@@ -809,16 +809,12 @@ function StoreProductModeBadges({ mode, className }: { mode?: string; className?
   if (allAllowed) {
     return <div className={cn("flex flex-wrap gap-1", className)}><Badge variant="secondary" className="text-[10px]">全模式</Badge></div>
   }
+  const allowedModes = equipmentModes.filter(([code]) => productModeIsAllowed(expression, code))
   return (
     <div className={cn("flex flex-wrap gap-1", className)}>
-      {equipmentModes.map(([code, label]) => {
-        const allowed = productModeIsAllowed(expression, code)
-        return (
-          <Badge key={code} variant={allowed ? "secondary" : "outline"} className={cn("text-[10px]", !allowed && "line-through opacity-50")} title={allowed ? `适用于 ${label}` : `不适用于 ${label}`}>
-            {label}
-          </Badge>
-        )
-      })}
+      {allowedModes.map(([code, label]) => (
+        <Badge key={code} variant="secondary" className="text-[10px]">{label}</Badge>
+      ))}
     </div>
   )
 }
