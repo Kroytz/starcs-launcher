@@ -679,9 +679,11 @@ export function TaskCenterPage({
                 <span className="task-group-summary-count">{completedCount}<small>/{groupTasks.length}</small></span>
               </>}
             </span>
-            <ChevronDown className={cn("task-group-chevron", expanded && "task-group-chevron-open")} />
           </button>
           {claimableCount > 0 && <Button size="sm" className="task-group-claim" onClick={() => claimTaskGroup(group)}><Gift />完成任务{claimableCount > 1 ? ` ${claimableCount}` : ""}</Button>}
+          <button type="button" className="task-group-expand" aria-label={expanded ? `折叠${group.title}` : `展开${group.title}`} aria-expanded={expanded} aria-controls={panelID} onClick={() => toggleTaskGroup(group.id)}>
+            <ChevronDown className={cn("task-group-chevron", expanded && "task-group-chevron-open")} />
+          </button>
         </div>
 
         {expanded && (
