@@ -195,6 +195,8 @@ struct LauncherStoreItem {
     sort: i32,
     image_url: String,
     #[serde(default)]
+    mode: String,
+    #[serde(default)]
     stardust_type: String,
 }
 

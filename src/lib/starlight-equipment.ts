@@ -23,6 +23,22 @@ export function productModeIsAllowed(modeExpression: string, mode: string) {
   return !disallowed.includes(mode)
 }
 
+export function normalizeProductModeExpression(modeExpression?: string) {
+  return (modeExpression ?? "").trim() || "ALL"
+}
+
+export function isStoreItemAvailableInAnyMode(modeExpression: string | undefined, modeCodes: readonly string[]) {
+  const expression = normalizeProductModeExpression(modeExpression)
+  if (modeCodes.length === 0) return true
+  return modeCodes.some((mode) => productModeIsAllowed(expression, mode))
+}
+
+export function isProductModeAllowedInAllModes(modeExpression: string | undefined, modeCodes: readonly string[]) {
+  const expression = normalizeProductModeExpression(modeExpression)
+  if (modeCodes.length === 0) return true
+  return modeCodes.every((mode) => productModeIsAllowed(expression, mode))
+}
+
 export function getEquipmentValidationError(item: LauncherInventoryItem): string | null {
   const slot = getCosmeticSlot(item)
   if (!slot) return "该物品不属于可装备外观。"

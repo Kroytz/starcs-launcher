@@ -76,7 +76,10 @@ import {
   getCosmeticSlot,
   getEquipmentValidationError,
   getEquippedTeams,
+  isProductModeAllowedInAllModes,
   isStarLightItemEquipped,
+  isStoreItemAvailableInAnyMode,
+  normalizeProductModeExpression,
   productModeIsAllowed,
   type EquipmentTargetTeam,
 } from "@/lib/starlight-equipment"
@@ -792,6 +795,34 @@ function storeTierLabel(item: LauncherStoreItem) {
   return "长期"
 }
 
+const equipmentModes = Object.entries(modeLabels)
+const storeModeCodes = Object.keys(modeLabels)
+
+function isVisibleStoreItem(item: LauncherStoreItem) {
+  if (item.purchaseBackend !== "star-product") return true
+  return isStoreItemAvailableInAnyMode(item.mode, storeModeCodes)
+}
+
+function StoreProductModeBadges({ mode, className }: { mode?: string; className?: string }) {
+  const expression = normalizeProductModeExpression(mode)
+  const allAllowed = isProductModeAllowedInAllModes(mode, storeModeCodes)
+  if (allAllowed) {
+    return <div className={cn("flex flex-wrap gap-1", className)}><Badge variant="secondary" className="text-[10px]">全模式</Badge></div>
+  }
+  return (
+    <div className={cn("flex flex-wrap gap-1", className)}>
+      {equipmentModes.map(([code, label]) => {
+        const allowed = productModeIsAllowed(expression, code)
+        return (
+          <Badge key={code} variant={allowed ? "secondary" : "outline"} className={cn("text-[10px]", !allowed && "line-through opacity-50")} title={allowed ? `适用于 ${label}` : `不适用于 ${label}`}>
+            {label}
+          </Badge>
+        )
+      })}
+    </div>
+  )
+}
+
 function StorePage({ data, isAuthenticated, onRequireLogin, onPurchase }: { data: LauncherBootstrap; isAuthenticated: boolean; onRequireLogin: () => void; onPurchase: (item: LauncherStoreItem) => Promise<boolean> }) {
   const [activeStore, setActiveStore] = useState<StoreKind>("afdian")
   const [activeCategory, setActiveCategory] = useState("all")
@@ -805,7 +836,7 @@ function StorePage({ data, isAuthenticated, onRequireLogin, onPurchase }: { data
   const categoryScrollRef = useRef<HTMLDivElement>(null)
   const [categoryScrollEdges, setCategoryScrollEdges] = useState({ left: false, right: false })
 
-  const currencyItems = data.storeItems.filter((item) => item.enabled && item.currency === activeStore)
+  const currencyItems = data.storeItems.filter((item) => item.enabled && item.currency === activeStore && isVisibleStoreItem(item))
   const categories = [...new Set(currencyItems.map((item) => item.category || "其他"))]
   const activeItems = currencyItems.filter((item) => activeCategory === "all" || (item.category || "其他") === activeCategory)
   // 同一星光商品的多个价格档位（7 天/30 天/永久等）合并成一张卡片，购买时在弹窗内选档位
@@ -968,6 +999,12 @@ function StorePage({ data, isAuthenticated, onRequireLogin, onPurchase }: { data
               <DialogHeader><DialogTitle className="flex items-center gap-2">{purchaseIsStardust ? <Gem className="size-5 text-secondary" /> : <Sparkles className="size-5 text-primary" />}确认购买</DialogTitle><DialogDescription>购买后立即发放到游戏内库存，可在库存页查看。</DialogDescription></DialogHeader>
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 px-4 py-3"><span className="min-w-0 truncate font-medium">{purchaseTarget[0].title}</span><Badge variant="secondary">{purchaseTarget[0].category || "其他"}</Badge></div>
+                {purchaseTarget[0].purchaseBackend === "star-product" && (
+                  <div className="rounded-xl border border-border bg-muted/20 px-4 py-3">
+                    <div className="mb-2 text-xs font-medium text-muted-foreground">适用模式</div>
+                    <StoreProductModeBadges mode={purchaseTarget[0].mode} />
+                  </div>
+                )}
                 {purchaseTarget.length > 1 && (
                   <div className="grid gap-2">
                     {purchaseTarget.map((tier) => (
@@ -1030,7 +1067,7 @@ function StorePage({ data, isAuthenticated, onRequireLogin, onPurchase }: { data
                 {item.imageUrl ? <img src={item.imageUrl} alt="" className="absolute inset-0 size-full object-cover" onError={(event) => { event.currentTarget.style.display = "none" }} /> : null}
                 {!isAfdianItem && <Icon className="size-12 text-white/90" />}
               </div>
-              <CardHeader><div className="flex items-center justify-between gap-2"><div className="flex min-w-0 gap-1"><Badge variant="secondary">{item.category || "其他"}</Badge>{item.tag && item.tag !== item.category && <Badge variant="outline" className={rarityBadgeClass(item.tag)}>{item.tag}</Badge>}{item.purchaseBackend === "star-product" && (group.tiers.length > 1 ? <Badge variant="outline">{group.tiers.length} 档位</Badge> : <Badge variant="outline">{storeTierLabel(item)}</Badge>)}</div><span className="flex items-center gap-1 font-semibold text-primary">{activeStore === "afdian" ? <>¥{minPrice}</> : <>{activeStore === "starlight" ? <Sparkles className="size-3.5" /> : <Gem className="size-3.5" />}{minPrice}{group.tiers.length > 1 && <span className="text-xs font-normal text-muted-foreground"> 起</span>}</>}</span></div><CardTitle className="pt-3 text-base">{item.title}</CardTitle><CardDescription>{item.description}</CardDescription></CardHeader>
+              <CardHeader><div className="flex items-center justify-between gap-2"><div className="flex min-w-0 gap-1"><Badge variant="secondary">{item.category || "其他"}</Badge>{item.tag && item.tag !== item.category && <Badge variant="outline" className={rarityBadgeClass(item.tag)}>{item.tag}</Badge>}{item.purchaseBackend === "star-product" && (group.tiers.length > 1 ? <Badge variant="outline">{group.tiers.length} 档位</Badge> : <Badge variant="outline">{storeTierLabel(item)}</Badge>)}</div><span className="flex items-center gap-1 font-semibold text-primary">{activeStore === "afdian" ? <>¥{minPrice}</> : <>{activeStore === "starlight" ? <Sparkles className="size-3.5" /> : <Gem className="size-3.5" />}{minPrice}{group.tiers.length > 1 && <span className="text-xs font-normal text-muted-foreground"> 起</span>}</>}</span></div><CardTitle className="pt-3 text-base">{item.title}</CardTitle><CardDescription>{item.description}</CardDescription>{item.purchaseBackend === "star-product" && <StoreProductModeBadges mode={item.mode} className="pt-2" />}</CardHeader>
               <CardContent><Button className="w-full" variant="outline" onClick={() => void purchase(group)}>{item.purchaseBackend === "afdian-cdk" ? "前往爱发电购买" : !isAuthenticated ? "登录后购买" : item.purchaseBackend === "challenge-stardust" ? "星尘购买" : "星光购买"}</Button></CardContent>
             </Card>
           )
@@ -1075,8 +1112,6 @@ function BackendDataPage({ isLoading, error, onRetry }: { isLoading: boolean; er
     </main>
   )
 }
-
-const equipmentModes = Object.entries(modeLabels)
 
 function InventoryPage({ items, purchaseHistory, equipment, isAuthenticated, isEquipmentLoading, equipmentUnavailableReason, onRequireLogin, onRetryEquipment, onEquipmentOperation, onStardustOperation }: { items: LauncherInventoryItem[]; purchaseHistory: LauncherPurchaseHistoryItem[]; equipment: StarLightEquipmentProfile; isAuthenticated: boolean; isEquipmentLoading: boolean; equipmentUnavailableReason: string | null; onRequireLogin: () => void; onRetryEquipment: () => void; onEquipmentOperation: (equip: boolean, productId: number, modes: string[], team: EquipmentTargetTeam) => Promise<boolean>; onStardustOperation: (equip: boolean, itemType: string, uniqueId: string) => Promise<boolean> }) {
   const [inventory, setInventory] = useState(items)

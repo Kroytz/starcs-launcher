@@ -66,6 +66,7 @@ export type LauncherStoreItem = {
   enabled: boolean
   sort: number
   imageUrl: string
+  mode?: string
   stardustType?: string
 }
 
