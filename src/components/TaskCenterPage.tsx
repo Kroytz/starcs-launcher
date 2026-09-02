@@ -38,7 +38,7 @@ import {
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 
-type TaskCategory = "daily" | "weekly" | "event" | "season"
+type TaskCategory = "onboarding" | "daily" | "weekly" | "event" | "season"
 type RewardKind = "starlight" | "stardust" | "experience" | "item"
 
 type DemoReward = {
@@ -74,6 +74,7 @@ type DemoEventGroup = {
 }
 
 const categoryOptions: Array<{ id: TaskCategory; label: string; description: string }> = [
+  { id: "onboarding", label: "新手旅程", description: "熟悉 STARCS 的基础功能" },
   { id: "daily", label: "每日任务", description: "每天 04:00 刷新" },
   { id: "weekly", label: "每周任务", description: "每周一 04:00 刷新" },
   { id: "event", label: "活动任务", description: "限时小任务组" },
@@ -102,6 +103,78 @@ const demoEventGroups: DemoEventGroup[] = [
 ]
 
 const demoTasks: DemoTask[] = [
+  {
+    id: "onboarding-account",
+    category: "onboarding",
+    title: "确认你的身份",
+    description: "识别当前 Steam 账号并完成登陆器登录。",
+    current: 1,
+    target: 1,
+    unit: "项",
+    icon: CheckCircle2,
+    accent: "from-sky-500 to-blue-600",
+    rewards: [{ kind: "starlight", amount: 100, label: "星光" }],
+    claimedByDefault: true,
+    hint: "正式接入后，将在玩家首次完成登陆器登录时自动记录。",
+  },
+  {
+    id: "onboarding-server",
+    category: "onboarding",
+    title: "选择第一片战场",
+    description: "从服务器列表进入任意 STARCS 服务器。",
+    current: 1,
+    target: 1,
+    unit: "次",
+    icon: Gamepad2,
+    accent: "from-indigo-500 to-violet-600",
+    rewards: [
+      { kind: "starlight", amount: 120, label: "星光" },
+      { kind: "experience", amount: 100, label: "赛季经验" },
+    ],
+    hint: "点击首页中的服务器并成功进入游戏后完成。",
+  },
+  {
+    id: "onboarding-match",
+    category: "onboarding",
+    title: "完成第一局游戏",
+    description: "留在服务器中，直到一局游戏正常结算。",
+    current: 0,
+    target: 1,
+    unit: "局",
+    icon: Trophy,
+    accent: "from-amber-400 to-orange-600",
+    rewards: [{ kind: "item", amount: 1, label: "新手补给箱" }],
+    hint: "这是当前推荐目标；中途退出不会记录完成进度。",
+  },
+  {
+    id: "onboarding-inventory",
+    category: "onboarding",
+    title: "整理你的库存",
+    description: "打开库存并查看任意一件物品的详情。",
+    current: 0,
+    target: 1,
+    unit: "次",
+    icon: Gift,
+    accent: "from-emerald-500 to-teal-600",
+    rewards: [{ kind: "starlight", amount: 150, label: "星光" }],
+    hint: "库存功能需要登录；领取的新手物品也会在这里展示。",
+  },
+  {
+    id: "onboarding-loadout",
+    category: "onboarding",
+    title: "保存第一套配置",
+    description: "为任意模式装备一件武器或角色外观。",
+    current: 0,
+    target: 1,
+    unit: "套",
+    icon: Sparkles,
+    accent: "from-fuchsia-500 to-pink-600",
+    rewards: [
+      { kind: "stardust", amount: 25, label: "星尘" },
+      { kind: "item", amount: 1, label: "新手名片" },
+    ],
+    hint: "完成整组新手旅程后获得最终奖励，不影响每日和赛季任务进度。",
+  },
   {
     id: "daily-check-in",
     category: "daily",
@@ -383,7 +456,7 @@ export function TaskCenterPage({
   onRequireLogin: () => void
   onNavigateHome: () => void
 }) {
-  const [activeCategory, setActiveCategory] = useState<TaskCategory>("daily")
+  const [activeCategory, setActiveCategory] = useState<TaskCategory>("onboarding")
   const [claimedTaskIDs, setClaimedTaskIDs] = useState<Set<string>>(
     () => new Set(demoTasks.filter((task) => task.claimedByDefault).map((task) => task.id)),
   )
@@ -396,7 +469,11 @@ export function TaskCenterPage({
   const isClaimed = (task: DemoTask) => claimedTaskIDs.has(task.id)
   const claimableTasks = visibleTasks.filter((task) => isCompleted(task) && !isClaimed(task))
   const dailyCompleted = demoTasks.filter((task) => task.category === "daily" && isCompleted(task)).length
+  const onboardingCompleted = demoTasks.filter((task) => task.category === "onboarding" && isCompleted(task)).length
   const totalClaimed = claimedTaskIDs.size
+  const totalClaimable = demoTasks.filter((task) => isCompleted(task) && !isClaimed(task)).length
+  const recommendedOnboardingTask = demoTasks.find((task) => task.category === "onboarding" && isCompleted(task) && !isClaimed(task))
+    ?? demoTasks.find((task) => task.category === "onboarding" && !isCompleted(task))
   const categoryCount = (category: TaskCategory) => category === "event"
     ? demoEventGroups.length
     : demoTasks.filter((task) => task.category === category).length
@@ -429,7 +506,7 @@ export function TaskCenterPage({
         <div>
           <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-primary"><Zap className="size-3.5" />STAR 行动</div>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">任务中心</h1>
-          <p className="mt-1 text-sm text-muted-foreground">完成社区行动、积累赛季经验，并领取属于你的作战奖励。</p>
+          <p className="mt-1 text-sm text-muted-foreground">先看清现在能做什么，再按自己的节奏推进长期目标。</p>
         </div>
         <Badge variant="outline" className="border-primary/25 bg-primary/10 px-3 py-1 text-primary"><Sparkles />UI DEMO · 本地数据</Badge>
       </div>
@@ -448,29 +525,16 @@ export function TaskCenterPage({
         </div>
       )}
 
-      <section className="task-hero" aria-label="赛季任务总览">
-        <div className="relative z-10 max-w-2xl">
-          <div className="flex flex-wrap items-center gap-2"><Badge className="bg-white/15 text-white">第一赛季 · 星海行动</Badge><span className="text-xs text-white/65">剩余 42 天</span></div>
-          <div className="mt-5 flex items-end gap-3"><span className="text-5xl font-semibold tracking-tight text-white">Lv. 7</span><span className="pb-1 text-sm text-white/70">行动等级</span></div>
-          <div className="mt-5 max-w-xl"><div className="mb-2 flex justify-between text-xs text-white/70"><span>1,350 / 2,000 EXP</span><span>距离下一等级 650</span></div><Progress value={67.5} className="h-2 bg-white/15 [&>div]:bg-white" /></div>
-          <div className="mt-5 flex flex-wrap gap-4 text-xs text-white/75"><span className="flex items-center gap-1.5"><Flame className="size-4 text-orange-300" />连续活跃 5 天</span><span className="flex items-center gap-1.5"><CheckCircle2 className="size-4 text-emerald-300" />今日完成 {dailyCompleted}/4</span><span className="flex items-center gap-1.5"><Gift className="size-4 text-sky-200" />已领取 {totalClaimed} 项</span></div>
+      <section className="task-overview-bar" aria-label="当前任务概览">
+        <div className="task-overview-icon"><ListChecks /></div>
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold">现在有 {totalClaimable} 项奖励可以领取</div>
+          <div className="mt-1 text-xs text-muted-foreground">新手旅程 {onboardingCompleted}/5 · 今日任务 {dailyCompleted}/4 · 已领取 {totalClaimed} 项</div>
         </div>
-        <div className="task-next-reward">
-          <div className="text-xs font-medium uppercase tracking-[0.18em] text-white/55">下一等级奖励</div>
-          <div className="mt-4 grid size-14 place-items-center rounded-2xl bg-white/15 text-white shadow-inner"><Trophy className="size-7" /></div>
-          <div className="mt-4 text-lg font-semibold text-white">先锋补给</div>
-          <div className="mt-1 text-xs text-white/65">升级后自动解锁</div>
-          <div className="mt-4 flex flex-wrap gap-2"><RewardChip compact reward={{ kind: "starlight", amount: 120, label: "星光" }} /><RewardChip compact reward={{ kind: "item", amount: 1, label: "补给箱" }} /></div>
-        </div>
+        <div className="hidden items-center gap-2 sm:flex"><Badge variant="outline"><Flame />连续活跃 5 天</Badge><Badge variant="outline"><Clock3 />每日 04:00 刷新</Badge></div>
       </section>
 
-      <section className="mt-5 grid grid-cols-3 gap-3" aria-label="任务统计">
-        <Card><CardContent className="flex items-center gap-3 p-4"><div className="task-stat-icon bg-sky-500/10 text-sky-600 dark:text-sky-300"><CalendarDays /></div><div><div className="text-lg font-semibold">04:00</div><div className="text-xs text-muted-foreground">每日刷新</div></div></CardContent></Card>
-        <Card><CardContent className="flex items-center gap-3 p-4"><div className="task-stat-icon bg-orange-500/10 text-orange-600 dark:text-orange-300"><Flame /></div><div><div className="text-lg font-semibold">5 天</div><div className="text-xs text-muted-foreground">连续活跃</div></div></CardContent></Card>
-        <Card><CardContent className="flex items-center gap-3 p-4"><div className="task-stat-icon bg-violet-500/10 text-violet-600 dark:text-violet-300"><Medal /></div><div><div className="text-lg font-semibold">67.5%</div><div className="text-xs text-muted-foreground">本级进度</div></div></CardContent></Card>
-      </section>
-
-      <div className="mt-6 flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
+      <div className="mt-5 flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
         <div className="task-category-tabs" aria-label="任务分类">
           {categoryOptions.map((option) => (
             <button key={option.id} type="button" className={cn("task-category-tab", activeCategory === option.id && "task-category-tab-active")} onClick={() => setActiveCategory(option.id)} aria-pressed={activeCategory === option.id}>
@@ -483,7 +547,40 @@ export function TaskCenterPage({
 
       <div className="mt-4 grid items-start gap-5 lg:grid-cols-[minmax(0,1.65fr)_minmax(280px,.72fr)]">
         <section className="space-y-3" aria-label={categoryOptions.find((option) => option.id === activeCategory)?.label}>
-          {activeCategory === "event" ? demoEventGroups.map((group) => {
+          {activeCategory === "onboarding" ? (
+            <article className="task-onboarding-group">
+              <div className="task-guide-header">
+                <div className="task-guide-symbol"><Sparkles /></div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-semibold tracking-tight">初来乍到</h2><Badge className="bg-primary text-white">推荐</Badge></div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">按顺序熟悉登录、进服、库存和装备；每一步都能单独领取奖励。</p>
+                </div>
+                <div className="text-right"><div className="text-lg font-semibold tabular-nums">{onboardingCompleted}/5</div><div className="text-[11px] text-muted-foreground">已完成</div></div>
+              </div>
+              <div className="task-guide-progress">
+                <div className="flex items-center justify-between gap-3 text-xs"><span className="truncate text-muted-foreground">下一步：{recommendedOnboardingTask?.title ?? "旅程已完成"}</span><span className="shrink-0 font-medium">{Math.round((onboardingCompleted / 5) * 100)}%</span></div>
+                <Progress value={(onboardingCompleted / 5) * 100} className="mt-2 h-1.5" />
+              </div>
+              <div className="task-event-milestones">
+                {visibleTasks.map((task, index) => {
+                  const completed = isCompleted(task)
+                  const claimed = isClaimed(task)
+                  return (
+                    <button key={task.id} type="button" className={cn("task-event-milestone group", completed && !claimed && "task-event-milestone-ready", claimed && "task-event-milestone-claimed")} onClick={() => setSelectedTaskID(task.id)}>
+                      <span className={cn("task-event-step", completed && "task-event-step-complete")}>{claimed ? <Check /> : index + 1}</span>
+                      <span className="min-w-0 flex-1 text-left"><span className="block text-sm font-medium">{task.title}</span><span className="mt-0.5 block truncate text-xs text-muted-foreground">{task.description}</span></span>
+                      <span className="hidden flex-wrap justify-end gap-1.5 md:flex">{task.rewards.map((reward, rewardIndex) => <RewardChip key={`${reward.kind}-${rewardIndex}`} reward={reward} compact />)}</span>
+                      <Badge variant="outline" className={cn("shrink-0", claimed ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300" : completed ? "border-primary/25 bg-primary/10 text-primary" : "")}>
+                        {claimed ? "已领取" : completed ? "可领取" : "未完成"}
+                      </Badge>
+                      <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="task-guide-footer"><Gift />完成全部新手任务后，再获得新手名片与 25 星尘。</div>
+            </article>
+          ) : activeCategory === "event" ? demoEventGroups.map((group) => {
             const Icon = group.icon
             const groupTasks = visibleTasks.filter((task) => task.groupId === group.id)
             const groupCurrent = Math.max(...groupTasks.map((task) => task.current))
@@ -542,13 +639,16 @@ export function TaskCenterPage({
         </section>
 
         <aside className="space-y-4">
-          <Card className="overflow-hidden"><CardContent className="p-5"><div className="flex items-center justify-between"><div className="flex items-center gap-2 font-semibold"><Flame className="size-4 text-orange-500" />连续活跃</div><span className="text-xs text-muted-foreground">本周</span></div><div className="mt-5 grid grid-cols-7 gap-1.5">{[true, true, true, true, true, false, false].map((done, index) => <div key={index} className="text-center"><div className={cn("mx-auto grid size-8 place-items-center rounded-lg border text-xs", done ? "border-orange-400/25 bg-orange-500/12 text-orange-600 dark:text-orange-300" : "border-border bg-muted/20 text-muted-foreground")}>{done ? <Check className="size-3.5" /> : index + 1}</div><div className="mt-1.5 text-[10px] text-muted-foreground">{["一", "二", "三", "四", "五", "六", "日"][index]}</div></div>)}</div><div className="mt-4 rounded-lg bg-muted/25 px-3 py-2 text-xs leading-5 text-muted-foreground">再活跃 2 天即可获得周末加成：<span className="font-medium text-foreground">100 星光</span></div></CardContent></Card>
+          <Card className="task-pass-card overflow-hidden">
+            <CardContent className="relative p-5">
+              <div className="flex items-start justify-between gap-3"><div><div className="text-xs font-medium text-primary">第一赛季 · 星海行动</div><div className="mt-2 flex items-baseline gap-2"><span className="text-3xl font-semibold tracking-tight">Lv. 7</span><span className="text-xs text-muted-foreground">剩余 42 天</span></div></div><div className="task-pass-medal"><Medal /></div></div>
+              <div className="mt-5"><div className="mb-2 flex items-center justify-between text-xs"><span className="text-muted-foreground">1,350 / 2,000 EXP</span><span className="font-medium">67.5%</span></div><Progress value={67.5} className="h-1.5" /></div>
+              <div className="mt-4 flex items-center gap-3 rounded-xl bg-muted/25 p-3"><div className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Gift className="size-4" /></div><div className="min-w-0 flex-1"><div className="text-xs font-medium">下一级：先锋补给</div><div className="mt-0.5 text-[11px] text-muted-foreground">120 星光 · 补给箱</div></div></div>
+              <Button variant="outline" size="sm" className="mt-4 w-full" onClick={() => setActiveCategory("season")}><Trophy />查看赛季任务<ChevronRight /></Button>
+            </CardContent>
+          </Card>
 
-          <Card><CardContent className="p-5"><div className="flex items-center gap-2 font-semibold"><Target className="size-4 text-primary" />行动路线</div><div className="mt-5 space-y-4">{[
-            ["Lv. 7", "当前等级", true],
-            ["Lv. 8", "先锋补给", false],
-            ["Lv. 10", "赛季名片", false],
-          ].map(([level, label, active], index) => <div key={String(level)} className="relative flex items-center gap-3"><div className={cn("relative z-10 grid size-8 shrink-0 place-items-center rounded-full border text-[10px] font-semibold", active ? "border-primary bg-primary text-white" : "border-border bg-card text-muted-foreground")}>{index === 0 ? <Check className="size-3.5" /> : level}</div>{index < 2 && <div className="absolute left-[15px] top-7 h-8 w-px bg-border" />}<div><div className="text-sm font-medium">{label}</div><div className="text-[11px] text-muted-foreground">{level}</div></div></div>)}</div></CardContent></Card>
+          <Card className="overflow-hidden"><CardContent className="p-5"><div className="flex items-center justify-between"><div className="flex items-center gap-2 font-semibold"><Flame className="size-4 text-orange-500" />连续活跃</div><span className="text-xs text-muted-foreground">本周</span></div><div className="mt-5 grid grid-cols-7 gap-1.5">{[true, true, true, true, true, false, false].map((done, index) => <div key={index} className="text-center"><div className={cn("mx-auto grid size-8 place-items-center rounded-lg border text-xs", done ? "border-orange-400/25 bg-orange-500/12 text-orange-600 dark:text-orange-300" : "border-border bg-muted/20 text-muted-foreground")}>{done ? <Check className="size-3.5" /> : index + 1}</div><div className="mt-1.5 text-[10px] text-muted-foreground">{["一", "二", "三", "四", "五", "六", "日"][index]}</div></div>)}</div><div className="mt-4 rounded-lg bg-muted/25 px-3 py-2 text-xs leading-5 text-muted-foreground">再活跃 2 天即可获得周末加成：<span className="font-medium text-foreground">100 星光</span></div></CardContent></Card>
         </aside>
       </div>
 
