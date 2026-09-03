@@ -179,9 +179,9 @@ type AppTab = "home" | "store" | "inventory" | "tasks" | "profile"
 type ServerSort = "players" | "mode"
 
 const tabs: Array<{ id: AppTab; label: string; icon: LucideIcon }> = [
-  { id: "home", label: "首页", icon: Home },
   { id: "store", label: "商城", icon: ShoppingBag },
   { id: "inventory", label: "库存", icon: Backpack },
+  { id: "home", label: "首页", icon: Home },
   { id: "tasks", label: "任务", icon: ListChecks },
   { id: "profile", label: "我", icon: UserRound },
 ]
