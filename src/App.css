@@ -131,6 +131,14 @@ button { cursor: pointer; }
 .brand { display: flex; width: fit-content; align-items: center; gap: 10px; border: 0; color: inherit; background: transparent; }
 .brand-logo { width: 36px; height: 36px; object-fit: contain; filter: drop-shadow(0 0 12px rgb(109 126 216 / 28%)); }
 .app-tabs { display: flex; align-items: center; gap: 4px; border: 1px solid var(--border); border-radius: 10px; padding: 4px; background: color-mix(in srgb, var(--card) 88%, transparent); }
+.app-tabs .app-tab { transition: color 150ms ease, background-color 150ms ease, box-shadow 150ms ease, transform 100ms ease; }
+.app-tabs .app-tab:not(.app-tab-home):not([aria-current="page"]) { color: var(--muted-foreground); }
+.app-tabs .app-tab-home { height: 38px; margin: -3px 2px; border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent); border-radius: 9px; padding-inline: 18px; color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 9%, var(--card)); box-shadow: 0 5px 15px color-mix(in srgb, var(--color-primary) 12%, transparent); font-size: 13px; font-weight: 650; }
+.app-tabs .app-tab-home:hover { color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 14%, var(--card)); }
+.app-tabs .app-tab-home[aria-current="page"] { border-color: var(--color-primary); color: var(--primary-foreground); background: var(--color-primary); box-shadow: 0 7px 18px color-mix(in srgb, var(--color-primary) 28%, transparent); }
+.app-tabs .app-tab-home[aria-current="page"]:hover { color: var(--primary-foreground); background: color-mix(in srgb, var(--color-primary) 90%, black); }
+.app-tabs .app-tab:active { transform: scale(.96); }
+.app-tabs .app-tab-home svg { width: 17px; height: 17px; }
 .header-actions { justify-self: end; }
 .window-controls { display: flex; align-items: center; gap: 2px; margin-left: 6px; border-left: 1px solid var(--border); padding-left: 7px; }
 .window-control { display: grid; width: 38px; height: 32px; place-items: center; border: 1px solid transparent; border-radius: 8px; color: var(--muted-foreground); background: transparent; transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease; }
@@ -258,6 +266,7 @@ button { cursor: pointer; }
   .app-header { grid-template-columns: auto 1fr; }
   .app-tabs { position: fixed; z-index: 30; right: 12px; bottom: 12px; left: 12px; justify-content: space-around; box-shadow: 0 12px 36px rgb(15 23 42 / 22%); }
   .app-tabs button { flex: 1; }
+  .app-tabs .app-tab-home { height: 40px; flex: 1.15; margin: -7px 2px 0; }
   .app-tabs button svg { display: block; }
   .header-actions { justify-self: end; }
   .server-table-head { display: none; }

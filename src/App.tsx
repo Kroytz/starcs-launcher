@@ -2044,7 +2044,9 @@ function App() {
         <nav className="app-tabs" aria-label="主导航">
           {tabs.map((tab) => {
             const Icon = tab.icon
-            return <Button key={tab.id} variant={activeTab === tab.id ? "secondary" : "ghost"} size="sm" onClick={() => setActiveTab(tab.id)} aria-current={activeTab === tab.id ? "page" : undefined}><Icon />{tab.label}</Button>
+            const isActive = activeTab === tab.id
+            const isHome = tab.id === "home"
+            return <Button key={tab.id} className={cn("app-tab", isHome && "app-tab-home")} variant={isHome && isActive ? "default" : isActive ? "secondary" : "ghost"} size="sm" onClick={() => setActiveTab(tab.id)} aria-current={isActive ? "page" : undefined}><Icon />{tab.label}</Button>
           })}
         </nav>
 
