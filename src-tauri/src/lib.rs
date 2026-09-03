@@ -332,6 +332,97 @@ struct LauncherSeasonPass {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct LauncherTaskReward {
+    r#type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    r#ref: Option<String>,
+    amount: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LauncherTaskItem {
+    id: String,
+    code: String,
+    revision: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    series_code: Option<String>,
+    title: String,
+    description: String,
+    source: String,
+    current: u64,
+    target: u64,
+    unit: String,
+    status: String,
+    claim_policy: String,
+    locked: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    updated_at: Option<String>,
+    #[serde(default)]
+    rewards: Vec<LauncherTaskReward>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LauncherTaskGroup {
+    id: String,
+    code: String,
+    category: String,
+    title: String,
+    description: String,
+    repeat_policy: String,
+    completion_rule: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    required_task_count: Option<i32>,
+    unlock_policy: String,
+    period_key: String,
+    state: String,
+    completed_count: i32,
+    claimable_count: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    current_task_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    metadata: Option<serde_json::Value>,
+    #[serde(default)]
+    tasks: Vec<LauncherTaskItem>,
+    #[serde(default)]
+    rewards: Vec<LauncherTaskReward>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LauncherTaskCampaign {
+    id: String,
+    code: String,
+    kind: String,
+    title: String,
+    description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    starts_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ends_at: Option<String>,
+    timezone: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    metadata: Option<serde_json::Value>,
+    #[serde(default)]
+    groups: Vec<LauncherTaskGroup>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LauncherTaskCenter {
+    available: bool,
+    generated_at: String,
+    #[serde(default)]
+    campaigns: Vec<LauncherTaskCampaign>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    season_pass: Option<LauncherSeasonPass>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct LauncherPenalty {
     r#type: String,
     reason: String,
@@ -373,6 +464,15 @@ struct LauncherEquipmentCommandResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     auth_failure: Option<String>,
     equipment: Option<serde_json::Value>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LauncherTasksCommandResult {
+    authenticated: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    auth_failure: Option<String>,
+    tasks: Option<LauncherTaskCenter>,
 }
 
 #[derive(Serialize)]
@@ -690,6 +790,49 @@ async fn fetch_launcher_equipment(
 }
 
 #[tauri::command]
+async fn fetch_launcher_tasks(
+    token: String,
+    password: String,
+) -> Result<LauncherTasksCommandResult, String> {
+    let backend_url = std::env::var("STAR_LAUNCHER_BACKEND_URL")
+        .unwrap_or_else(|_| DEFAULT_LAUNCHER_BACKEND_URL.to_string());
+    let request_url = format!("{}/api/v1/me/tasks", backend_url.trim_end_matches('/'));
+    let response = reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|error| format!("创建任务请求客户端失败：{error}"))?
+        .get(&request_url)
+        .bearer_auth(token)
+        .header("X-StarCS-Reauth", password)
+        .send()
+        .await
+        .map_err(|error| format!("连接任务服务失败（{request_url}）：{error}"))?;
+    let status = response.status();
+    let payload = response
+        .json::<OptionalApiEnvelope<LauncherTaskCenter>>()
+        .await
+        .map_err(|error| format!("解析任务响应失败：{error}"))?;
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return Ok(LauncherTasksCommandResult {
+            authenticated: false,
+            auth_failure: Some(classify_auth_failure(payload.code).to_string()),
+            tasks: None,
+        });
+    }
+    if !status.is_success() || payload.code != 2000 {
+        return Err(payload.msg);
+    }
+    let tasks = payload
+        .data
+        .ok_or_else(|| "任务响应缺少数据".to_string())?;
+    Ok(LauncherTasksCommandResult {
+        authenticated: true,
+        auth_failure: None,
+        tasks: Some(tasks),
+    })
+}
+
+#[tauri::command]
 async fn update_launcher_equipment(
     token: String,
     password: String,
@@ -918,6 +1061,7 @@ pub fn run() {
             login_launcher_account,
             verify_launcher_password,
             fetch_launcher_equipment,
+            fetch_launcher_tasks,
             update_launcher_equipment,
             update_stardust_equipment,
             purchase_store_item,

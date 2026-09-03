@@ -103,6 +103,7 @@ import {
 import {
   fetchLauncherBootstrap,
   fetchLauncherEquipment,
+  fetchLauncherTasks,
   fetchLauncherWorkshopPacks,
   listenWorkshopSyncProgress,
   loginLauncherAccount,
@@ -122,6 +123,7 @@ import {
   type LauncherPurchaseHistoryItem,
   type LauncherSeasonPass,
   type LauncherStoreItem,
+  type LauncherTaskCenter,
   type LauncherWorkshopPack,
   type WorkshopSyncProgress,
   type StarLightEquipmentProfile,
@@ -1571,6 +1573,9 @@ function App() {
   const [authenticatedEquipment, setAuthenticatedEquipment] = useState<StarLightEquipmentProfile | null>(null)
   const [isEquipmentLoading, setIsEquipmentLoading] = useState(false)
   const [equipmentUnavailableReason, setEquipmentUnavailableReason] = useState<string | null>(null)
+  const [authenticatedTasks, setAuthenticatedTasks] = useState<LauncherTaskCenter | null>(null)
+  const [isTasksLoading, setIsTasksLoading] = useState(false)
+  const [tasksError, setTasksError] = useState<string | null>(null)
   const [purchaseHistory, setPurchaseHistory] = useState<LauncherPurchaseHistoryItem[]>([])
   const [seasonPass, setSeasonPass] = useState<LauncherSeasonPass | null>(null)
   const [penalties, setPenalties] = useState<LauncherPenalty[]>([])
@@ -1759,6 +1764,8 @@ function App() {
       setAuthenticatedStoreItems(session.storeItems)
       setAuthenticatedEquipment(null)
       setEquipmentUnavailableReason(null)
+      setAuthenticatedTasks(null)
+      setTasksError(null)
       setPurchaseHistory(session.purchaseHistory)
       setSeasonPass(session.seasonPass)
       setPenalties(session.penalties)
@@ -1767,6 +1774,7 @@ function App() {
       setPassword(currentPassword)
       setLoginOpen(false)
       void loadAuthenticatedEquipment(session.token, currentPassword)
+      void loadAuthenticatedTasks(session.token, currentPassword)
       return true
     } catch (error) {
       const fallback = "登录失败，请检查游戏内密码后重试。"
@@ -1814,6 +1822,9 @@ function App() {
     setAuthenticatedEquipment(null)
     setIsEquipmentLoading(false)
     setEquipmentUnavailableReason(null)
+    setAuthenticatedTasks(null)
+    setIsTasksLoading(false)
+    setTasksError(null)
     setPurchaseHistory([])
     setSeasonPass(null)
     setPenalties([])
@@ -1947,6 +1958,34 @@ function App() {
     }
   }
 
+  async function loadAuthenticatedTasks(token: string, currentPassword: string) {
+    if (activeAuthToken.current !== token) return
+    setIsTasksLoading(true)
+    setTasksError(null)
+    try {
+      let result = await fetchLauncherTasks(token, currentPassword)
+      if (!result.authenticated) {
+        const recovered = await handleAuthFailure(result, (nextToken) => fetchLauncherTasks(nextToken, currentPassword))
+        if (!recovered || !activeAuthToken.current) return
+        result = recovered
+      }
+      if (!activeAuthToken.current) return
+      if (!result.tasks?.available) {
+        setAuthenticatedTasks(null)
+        setTasksError("任务系统暂未开放，请稍后再来。")
+        return
+      }
+      setAuthenticatedTasks(result.tasks)
+    } catch (error) {
+      console.error("[StarCS Launcher] 读取任务失败", error)
+      if (activeAuthToken.current) {
+        setTasksError("任务进度暂时无法同步，请稍后重试。")
+      }
+    } finally {
+      if (activeAuthToken.current) setIsTasksLoading(false)
+    }
+  }
+
   async function applyEquipmentOperation(equip: boolean, productId: number, modes: string[], team: EquipmentTargetTeam) {
     if (!authToken) {
       openLogin()
@@ -2065,7 +2104,7 @@ function App() {
         {activeTab === "home" && <HomePage announcements={bootstrap?.announcements ?? []} maps={bootstrap?.maps ?? []} backendError={bootstrapError} isBackendLoading={isBootstrapLoading} onRetryBackend={() => void loadLauncherData()} />}
         {activeTab === "store" && (effectiveBootstrap ? <StorePage data={effectiveBootstrap} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} onPurchase={applyStorePurchase} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
         {activeTab === "inventory" && (bootstrap ? <InventoryPage key={isAuthenticated ? effectiveAccount?.profile.userId ?? "authenticated" : "guest"} items={isAuthenticated ? authenticatedInventory ?? [] : []} purchaseHistory={purchaseHistory} equipment={authenticatedEquipment ?? { version: 2, plugin: "star_light_store", modes: {}, unavailableModes: {} }} isAuthenticated={isAuthenticated} isEquipmentLoading={isEquipmentLoading} equipmentUnavailableReason={equipmentUnavailableReason} onRequireLogin={openLogin} onRetryEquipment={() => { if (authToken) void loadAuthenticatedEquipment(authToken, password) }} onEquipmentOperation={applyEquipmentOperation} onStardustOperation={applyStardustOperation} /> : <BackendDataPage isLoading={isBootstrapLoading} error={bootstrapError} onRetry={() => void loadLauncherData()} />)}
-        {activeTab === "tasks" && <TaskCenterPage isAuthenticated={isAuthenticated} onRequireLogin={openLogin} onNavigateHome={() => setActiveTab("home")} />}
+        {activeTab === "tasks" && <TaskCenterPage tasks={authenticatedTasks} isLoading={isTasksLoading} error={tasksError} isAuthenticated={isAuthenticated} onRequireLogin={openLogin} onRetry={() => { if (authToken) void loadAuthenticatedTasks(authToken, password) }} onNavigateHome={() => setActiveTab("home")} />}
         {activeTab === "profile" && <ProfilePage account={effectiveAccount} purchaseHistory={purchaseHistory} seasonPass={seasonPass} penalties={penalties} steamAccount={steamAccount} isAuthenticated={isAuthenticated} theme={theme} onThemeChange={setTheme} onLogin={openLogin} onLogout={logout} onCheckUpdate={runUpdateCheck} />}
       </div>
     </div>

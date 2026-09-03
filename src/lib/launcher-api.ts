@@ -224,6 +224,77 @@ export type LauncherSeasonPass = {
   updatedAt: string
 }
 
+export type LauncherTaskReward = {
+  type: string
+  ref?: string
+  amount: number
+  metadata?: unknown
+}
+
+export type LauncherTaskItem = {
+  id: string
+  code: string
+  revision: number
+  seriesCode?: string
+  title: string
+  description: string
+  source: string
+  current: number
+  target: number
+  unit: string
+  status: "in_progress" | "completed" | "claimed"
+  claimPolicy: "manual" | "automatic" | "external"
+  locked: boolean
+  updatedAt?: string
+  rewards: LauncherTaskReward[]
+}
+
+export type LauncherTaskGroup = {
+  id: string
+  code: string
+  category: string
+  title: string
+  description: string
+  repeatPolicy: string
+  completionRule: string
+  requiredTaskCount?: number
+  unlockPolicy: string
+  periodKey: string
+  state: string
+  completedCount: number
+  claimableCount: number
+  currentTaskId?: string
+  metadata?: unknown
+  tasks: LauncherTaskItem[]
+  rewards: LauncherTaskReward[]
+}
+
+export type LauncherTaskCampaign = {
+  id: string
+  code: string
+  kind: string
+  title: string
+  description: string
+  startsAt?: string
+  endsAt?: string
+  timezone: string
+  metadata?: unknown
+  groups: LauncherTaskGroup[]
+}
+
+export type LauncherTaskCenter = {
+  available: boolean
+  generatedAt: string
+  campaigns: LauncherTaskCampaign[]
+  seasonPass?: LauncherSeasonPass | null
+}
+
+export type LauncherTasksCommandResult = {
+  authenticated: boolean
+  authFailure?: AuthFailureReason | null
+  tasks: LauncherTaskCenter | null
+}
+
 export type LauncherPenalty = {
   type: string
   reason: string
@@ -282,6 +353,10 @@ export async function verifyLauncherPassword(token: string, password: string) {
 
 export async function fetchLauncherEquipment(token: string, password: string) {
   return invoke<LauncherEquipmentCommandResult>("fetch_launcher_equipment", { token, password })
+}
+
+export async function fetchLauncherTasks(token: string, password: string) {
+  return invoke<LauncherTasksCommandResult>("fetch_launcher_tasks", { token, password })
 }
 
 export async function updateLauncherEquipment(token: string, password: string, productId: number, modes: string[], team: "all" | "ct" | "t", equip: boolean) {
